@@ -1,0 +1,161 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String    @id @default(cuid())
+  infiniteFlightUsername  String    @unique
+  email                   String    @unique
+  passwordHash            String
+  displayName             String?
+  avatarUrl               String?
+  rank                    String?
+  bio                     String?
+  callsign                String?
+  role                    String    @default("user") // user, admin, owner
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  lastLoginAt             DateTime?
+
+  flights                 Flight[]
+  statistics              UserStatistics?
+  badges                  Badge[]
+  applications            Application[]
+  pireps                  Pirep[]
+  
+  @@index([role])
+  @@index([email])
+}
+
+model Flight {
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  departureAirport    String
+  arrivalAirport      String
+  aircraft            String
+  departureTime      DateTime
+  arrivalTime        DateTime
+  flightTimeMinutes   Int
+  distanceKm          Float?
+  flightNumber        String?
+  notes               String?
+  screenshotUrl       String?
+  infiniteFlightId    String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([departureTime])
+}
+
+model UserStatistics {
+  id                      String   @id @default(cuid())
+  userId                  String   @unique
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totalFlightTimeMinutes  Int      @default(0)
+  totalFlights            Int      @default(0)
+  totalDistanceKm          Float    @default(0)
+  visitedAirports         String   @default("[]") // JSON string for SQLite compatibility
+  aircraftTypes           String   @default("[]") // JSON string for SQLite compatibility
+  lastFlightDate          DateTime?
+  updatedAt               DateTime @updatedAt
+}
+
+model Badge {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeType String
+  badgeName String
+  earnedAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Application {
+  id                      String    @id @default(cuid())
+  userId                  String?
+  user                    User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  infiniteFlightUsername  String
+  email                   String
+  discordUsername         String
+  ifcUsername             String
+  grade                   Int
+  totalFlightTime         Int?
+  yearsOfExperience       Int?
+  motivation              String
+  status                  String    @default("pending") // pending, approved, rejected
+  reviewedBy              String?
+  reviewedAt             DateTime?
+  discordMessageId        String?   // Discord message ID for updating the notification
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@index([userId])
+}
+
+model AircraftType {
+  id                  String    @id @default(cuid())
+  name                String    // Aircraft type/model (e.g., "Boeing 777-300ER")
+  isActive            Boolean   @default(true) // Whether this aircraft type is visible in PIREP form
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  liveries            Livery[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
+model Livery {
+  id                  String    @id @default(cuid())
+  aircraftTypeId     String
+  aircraftType        AircraftType @relation(fields: [aircraftTypeId], references: [id], onDelete: Cascade)
+  name                String    // Livery name (e.g., "MXVA Standard")
+  isActive            Boolean   @default(true) // Whether this livery is visible in PIREP form
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  pireps              Pirep[]
+
+  @@index([aircraftTypeId])
+  @@index([isActive])
+}
+
+model Pirep {
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flightDate          DateTime
+  flightNumber        String
+  flightTime          String    // Format: "XXhrXXmin"
+  departureAirport    String
+  arrivalAirport      String
+  liveryId            String
+  livery              Livery    @relation(fields: [liveryId], references: [id])
+  multiplierCode      String?
+  comment             String?
+  adminComment        String?   // Admin's reply/comment
+  status              String    @default("pending") // pending, approved, rejected
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([liveryId])
+}
+

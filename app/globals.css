@@ -1,0 +1,184 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
+  }
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Ensure input fields are always visible */
+input[type="email"],
+input[type="password"],
+input[type="text"] {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+}
+
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="text"]:focus {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+}
+
+input[type="email"]::placeholder,
+input[type="password"]::placeholder,
+input[type="text"]::placeholder {
+  color: #9ca3af !important;
+}
+
+/* Neon/3D animations for Apply page */
+@keyframes blob {
+  0% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* Override input styles for dark theme on apply page */
+.apply-page input[type="email"],
+.apply-page input[type="password"],
+.apply-page input[type="text"],
+.apply-page input[type="number"],
+.apply-page textarea,
+.apply-page select {
+  color: #ffffff !important;
+  background-color: rgba(17, 24, 39, 0.5) !important;
+}
+
+.apply-page input[type="email"]::placeholder,
+.apply-page input[type="password"]::placeholder,
+.apply-page input[type="text"]::placeholder,
+.apply-page input[type="number"]::placeholder,
+.apply-page textarea::placeholder {
+  color: #6b7280 !important;
+}
+
+/* Subtle neon effects for dashboard and admin panel */
+@keyframes subtle-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(0, 102, 204, 0.1), 0 0 20px rgba(0, 102, 204, 0.05);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(0, 102, 204, 0.15), 0 0 30px rgba(0, 102, 204, 0.08);
+  }
+}
+
+.neon-card {
+  background: white;
+  border: 1px solid rgba(0, 102, 204, 0.2);
+  box-shadow: 0 0 10px rgba(0, 102, 204, 0.1), 0 0 20px rgba(0, 102, 204, 0.05);
+  transition: all 0.3s ease;
+}
+
+.neon-card:hover {
+  border-color: rgba(0, 102, 204, 0.4);
+  box-shadow: 0 0 15px rgba(0, 102, 204, 0.2), 0 0 30px rgba(0, 102, 204, 0.1);
+  transform: translateY(-2px);
+}
+
+.neon-button {
+  background: #0066CC;
+  color: white;
+  box-shadow: 0 0 10px rgba(0, 102, 204, 0.3), 0 0 20px rgba(0, 102, 204, 0.1);
+  transition: all 0.3s ease;
+}
+
+.neon-button:hover {
+  box-shadow: 0 0 15px rgba(0, 102, 204, 0.5), 0 0 30px rgba(0, 102, 204, 0.2);
+  transform: translateY(-1px);
+}
+
+.neon-border {
+  border: 1px solid rgba(0, 102, 204, 0.3);
+  box-shadow: 0 0 8px rgba(0, 102, 204, 0.1);
+  transition: all 0.3s ease;
+}
+
+.neon-border:hover {
+  border-color: rgba(0, 102, 204, 0.5);
+  box-shadow: 0 0 12px rgba(0, 102, 204, 0.2);
+}
+
+.neon-input:focus {
+  border-color: rgba(0, 102, 204, 0.5);
+  box-shadow: 0 0 8px rgba(0, 102, 204, 0.2), 0 0 15px rgba(0, 102, 204, 0.1);
+  outline: none;
+}
+
+.neon-tab-active {
+  border-bottom-color: #0066CC;
+  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.2);
+}
+
+.neon-stats-card {
+  background: white;
+  border: 1px solid rgba(0, 102, 204, 0.2);
+  box-shadow: 0 0 12px rgba(0, 102, 204, 0.1), 0 0 25px rgba(0, 102, 204, 0.05);
+  transition: all 0.3s ease;
+}
+
+.neon-stats-card:hover {
+  border-color: rgba(0, 102, 204, 0.4);
+  box-shadow: 0 0 18px rgba(0, 102, 204, 0.2), 0 0 35px rgba(0, 102, 204, 0.1);
+  transform: translateY(-3px);
+}
+
+.neon-sidebar {
+  background: white;
+  border: 1px solid rgba(0, 102, 204, 0.15);
+  box-shadow: 0 0 15px rgba(0, 102, 204, 0.1);
+}
+
+.neon-modal {
+  background: white;
+  border: 1px solid rgba(0, 102, 204, 0.3);
+  box-shadow: 0 0 20px rgba(0, 102, 204, 0.15), 0 0 40px rgba(0, 102, 204, 0.1);
+}
+
