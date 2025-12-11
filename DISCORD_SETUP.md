@@ -31,7 +31,7 @@ Applicationが送信されると、Discordの特定のチャンネルに自動�
 1. Discord Developer Portalで「OAuth2」→「URL Generator」に移動
 2. 「Scopes」で以下を選択：
    - ✅ `bot`
-   - ✅ `applications.commands`
+   - ✅ `   applications.commands`
 3. 「Bot Permissions」で以下を選択：
    - ✅ Send Messages
    - ✅ Embed Links
@@ -139,4 +139,5 @@ Botが正常に起動すると、以下のメッセージが表示されます�
 - ✅ ステータスが一番下に表示
 - ✅ 3つのボタン（In Progress、Approve、Reject）でステータス更新
 - ✅ ボタンクリックでサーバー側とDiscordメッセージの両方が更新
+
 

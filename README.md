@@ -135,6 +135,9 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
 NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
+
+# Mapbox Configuration (for flight route map preview)
+NEXT_PUBLIC_MAPBOX_TOKEN=your-mapbox-access-token-here
 ```
 
 #### Firebase プロジェクトのセットアップ
@@ -145,6 +148,18 @@ NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
    - 「Sign-in method」タブで「Email/Password」を有効化
 4. 「Project settings」→「General」タブで、Webアプリを追加
 5. 表示される設定値を `.env.local` にコピー
+
+#### Mapbox API キーの取得（フライトルートマップ用）
+
+PIREP入力フォームで空港間のルートをマップで表示するには、Mapbox APIキーが必要です。
+
+1. [Mapbox](https://www.mapbox.com/) にアクセス
+2. アカウントを作成（無料プランで月間50,000マップ読み込みまで可能）
+3. [Accountページ](https://account.mapbox.com/access-tokens/) にアクセス
+4. 「Default public token」をコピー、または新しいトークンを作成
+5. `.env.local` に `NEXT_PUBLIC_MAPBOX_TOKEN=your-token-here` を追加
+
+**注意**: Mapboxトークンが設定されていない場合、マップは表示されず、エラーメッセージが表示されます。マップ機能を使用しない場合は、この変数の設定はオプションです。
 
 #### 管理者テストユーザーの作成
 

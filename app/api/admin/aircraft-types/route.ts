@@ -74,7 +74,17 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(aircraftTypes)
+    // Ensure isActive defaults to true if null/undefined (for backward compatibility)
+    const normalizedAircraftTypes = aircraftTypes.map(aircraftType => ({
+      ...aircraftType,
+      isActive: aircraftType.isActive ?? true,
+      liveries: aircraftType.liveries.map(livery => ({
+        ...livery,
+        isActive: livery.isActive ?? true,
+      })),
+    }))
+
+    return NextResponse.json(normalizedAircraftTypes)
   } catch (error: any) {
     console.error('Error fetching aircraft types:', error)
     return NextResponse.json(

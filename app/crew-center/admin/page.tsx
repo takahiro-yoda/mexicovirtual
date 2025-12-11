@@ -1355,8 +1355,16 @@ export default function AdminPage() {
                             <label className="flex items-center space-x-2 cursor-pointer">
                               <input
                                 type="checkbox"
-                                checked={aircraftType.isActive !== false}
+                                checked={aircraftType.isActive === true}
                                 onChange={async (e) => {
+                                  const newValue = e.target.checked
+                                  // Optimistic update: update UI immediately
+                                  setAircraftTypes(prev => prev.map(at => 
+                                    at.id === aircraftType.id 
+                                      ? { ...at, isActive: newValue }
+                                      : at
+                                  ))
+                                  
                                   try {
                                     const response = await fetch(`/api/admin/aircraft-types/${aircraftType.id}`, {
                                       method: 'PATCH',
@@ -1364,16 +1372,32 @@ export default function AdminPage() {
                                         'Content-Type': 'application/json',
                                       },
                                       body: JSON.stringify({
-                                        isActive: e.target.checked,
+                                        isActive: newValue,
                                         adminEmail: user?.email || null,
                                       }),
                                     })
                                     if (response.ok) {
-                                      await loadAircraftTypes()
+                                      // Don't reload - optimistic update is sufficient for checkbox changes
+                                      // This prevents UI flickering
                                     } else {
-                                      alert('Failed to update aircraft type visibility')
+                                      // Rollback on error
+                                      setAircraftTypes(prev => prev.map(at => 
+                                        at.id === aircraftType.id 
+                                          ? { ...at, isActive: !newValue }
+                                          : at
+                                      ))
+                                      const errorData = await response.json().catch(() => ({}))
+                                      console.error('Failed to update aircraft type:', errorData)
+                                      const errorMessage = errorData.details?.message || errorData.error || errorData.details || 'Unknown error'
+                                      alert(`Failed to update aircraft type visibility: ${errorMessage}`)
                                     }
                                   } catch (error) {
+                                    // Rollback on error
+                                    setAircraftTypes(prev => prev.map(at => 
+                                      at.id === aircraftType.id 
+                                        ? { ...at, isActive: !newValue }
+                                        : at
+                                    ))
                                     console.error('Error updating aircraft type:', error)
                                     alert('Failed to update aircraft type visibility')
                                   }
@@ -1449,8 +1473,23 @@ export default function AdminPage() {
                                       <label className="flex items-center space-x-2 cursor-pointer">
                                         <input
                                           type="checkbox"
-                                          checked={livery.isActive !== false}
+                                          checked={livery.isActive === true}
                                           onChange={async (e) => {
+                                            const newValue = e.target.checked
+                                            // Optimistic update: update UI immediately
+                                            setAircraftTypes(prev => prev.map(at => 
+                                              at.id === livery.aircraftTypeId
+                                                ? {
+                                                    ...at,
+                                                    liveries: at.liveries.map(l => 
+                                                      l.id === livery.id 
+                                                        ? { ...l, isActive: newValue }
+                                                        : l
+                                                    )
+                                                  }
+                                                : at
+                                            ))
+                                            
                                             try {
                                               const response = await fetch(`/api/admin/liveries/${livery.id}`, {
                                                 method: 'PATCH',
@@ -1458,16 +1497,46 @@ export default function AdminPage() {
                                                   'Content-Type': 'application/json',
                                                 },
                                                 body: JSON.stringify({
-                                                  isActive: e.target.checked,
+                                                  isActive: newValue,
                                                   adminEmail: user?.email || null,
                                                 }),
                                               })
                                               if (response.ok) {
-                                                await loadAircraftTypes()
+                                                // Don't reload - optimistic update is sufficient for checkbox changes
+                                                // This prevents UI flickering
                                               } else {
-                                                alert('Failed to update livery visibility')
+                                                // Rollback on error
+                                                setAircraftTypes(prev => prev.map(at => 
+                                                  at.id === livery.aircraftTypeId
+                                                    ? {
+                                                        ...at,
+                                                        liveries: at.liveries.map(l => 
+                                                          l.id === livery.id 
+                                                            ? { ...l, isActive: !newValue }
+                                                            : l
+                                                        )
+                                                      }
+                                                    : at
+                                                ))
+                                                const errorData = await response.json().catch(() => ({}))
+                                                console.error('Failed to update livery:', errorData)
+                                                const errorMessage = errorData.details?.message || errorData.error || errorData.details || 'Unknown error'
+                                                alert(`Failed to update livery visibility: ${errorMessage}`)
                                               }
                                             } catch (error) {
+                                              // Rollback on error
+                                              setAircraftTypes(prev => prev.map(at => 
+                                                at.id === livery.aircraftTypeId
+                                                  ? {
+                                                      ...at,
+                                                      liveries: at.liveries.map(l => 
+                                                        l.id === livery.id 
+                                                          ? { ...l, isActive: !newValue }
+                                                          : l
+                                                      )
+                                                    }
+                                                  : at
+                                              ))
                                               console.error('Error updating livery:', error)
                                               alert('Failed to update livery visibility')
                                             }

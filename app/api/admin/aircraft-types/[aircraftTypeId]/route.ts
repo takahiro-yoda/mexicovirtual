@@ -92,8 +92,39 @@ export async function PATCH(
     })
   } catch (error: any) {
     console.error('Error updating aircraft type:', error)
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      meta: error.meta,
+      stack: error.stack,
+    })
+    
+    // Provide more detailed error information
+    let errorMessage = 'Failed to update aircraft type'
+    let errorDetails: any = { message: error.message }
+    
+    if (error?.code) {
+      errorDetails.code = error.code
+      errorDetails.meta = error.meta
+      
+      // Handle specific Prisma errors
+      if (error.code === 'P2025') {
+        errorMessage = 'Aircraft type not found'
+        errorDetails.message = `No aircraft type found with id: ${params.aircraftTypeId}`
+      } else if (error.code === 'P2002') {
+        errorMessage = 'Unique constraint violation'
+        errorDetails.message = 'An aircraft type with this name already exists'
+      } else if (error.code === 'P1001') {
+        errorMessage = 'Database connection error'
+        errorDetails.message = 'Unable to connect to the database'
+      }
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to update aircraft type', details: error.message },
+      { 
+        error: errorMessage,
+        details: errorDetails,
+      },
       { status: 500 }
     )
   }

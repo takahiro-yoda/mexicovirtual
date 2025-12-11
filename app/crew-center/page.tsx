@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { isAdmin } from '@/lib/permissions'
 import Link from 'next/link'
+import FlightRouteMap from '@/components/FlightRouteMap'
 
 export default function CrewCenterPage() {
   const { user, loading, role, signOut } = useAuth()
@@ -31,6 +32,7 @@ export default function CrewCenterPage() {
   const [isSubmittingPirep, setIsSubmittingPirep] = useState(false)
   const [liveries, setLiveries] = useState<Array<{ id: string; name: string; aircraftType: { id: string; name: string } }>>([])
   const [groupedLiveries, setGroupedLiveries] = useState<Record<string, Array<{ id: string; name: string; aircraftType: { id: string; name: string } }>>>({})
+  const [selectedAircraftTypeId, setSelectedAircraftTypeId] = useState<string>('')
   const [selectedLiveryId, setSelectedLiveryId] = useState<string>('')
   const [pirepFormData, setPirepFormData] = useState({
     flightDate: '',
@@ -43,6 +45,28 @@ export default function CrewCenterPage() {
     multiplierCode: '',
     comment: '',
   })
+  const [approvedFlights, setApprovedFlights] = useState<Array<{
+    id: string
+    flightDate: string
+    flightNumber: string
+    flightTime: string
+    departureAirport: string
+    arrivalAirport: string
+    livery: {
+      name: string
+      aircraftType: {
+        name: string
+      }
+    }
+    comment?: string | null
+    reviewedAt?: Date | null
+    multiplierCode?: string | null
+    adminComment?: string | null
+    createdAt?: string
+  }>>([])
+  const [isLoadingFlights, setIsLoadingFlights] = useState(false)
+  const [selectedFlightDetail, setSelectedFlightDetail] = useState<typeof approvedFlights[0] | null>(null)
+  const [isFlightDetailModalOpen, setIsFlightDetailModalOpen] = useState(false)
 
   // Load flight time from API
   useEffect(() => {
@@ -87,6 +111,33 @@ export default function CrewCenterPage() {
       }
     }
   }, [user?.email])
+
+  // Load approved flights when flights tab is active
+  useEffect(() => {
+    if (activeTab === 'flights' && user?.email) {
+      const loadApprovedFlights = async () => {
+        setIsLoadingFlights(true)
+        try {
+          const response = await fetch(`/api/pireps?userEmail=${encodeURIComponent(user.email || '')}&status=approved`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            setApprovedFlights(data)
+          } else {
+            console.error('Failed to load approved flights:', response.status, response.statusText)
+            setApprovedFlights([])
+          }
+        } catch (error) {
+          console.error('Error loading approved flights:', error)
+          setApprovedFlights([])
+        } finally {
+          setIsLoadingFlights(false)
+        }
+      }
+      
+      loadApprovedFlights()
+    }
+  }, [activeTab, user?.email])
 
   // Load liveries when modal opens
   useEffect(() => {
@@ -159,6 +210,84 @@ export default function CrewCenterPage() {
     }
   }, [isPirepModalOpen])
 
+  // Reset selections when modal opens/closes
+  useEffect(() => {
+    if (!isPirepModalOpen) {
+      setSelectedAircraftTypeId('')
+      setSelectedLiveryId('')
+    } else {
+      // Set default date to today when modal opens
+      const today = new Date()
+      const year = today.getFullYear()
+      const month = String(today.getMonth() + 1).padStart(2, '0')
+      const day = String(today.getDate()).padStart(2, '0')
+      const todayString = `${year}-${month}-${day}`
+      setPirepFormData(prev => ({
+        ...prev,
+        flightDate: prev.flightDate || todayString
+      }))
+    }
+  }, [isPirepModalOpen])
+
+  // Reset livery selection when aircraft type changes
+  useEffect(() => {
+    setSelectedLiveryId('')
+  }, [selectedAircraftTypeId])
+
+  // Get available aircraft types (unique list)
+  const aircraftTypes = Array.from(new Set(liveries.map(l => l.aircraftType.id)))
+    .map(id => {
+      const livery = liveries.find(l => l.aircraftType.id === id)
+      return livery ? livery.aircraftType : null
+    })
+    .filter((at): at is { id: string; name: string } => at !== null)
+    .sort((a, b) => {
+      // Natural sort
+      const regex = /(\d+|\D+)/g
+      const aParts = a.name.match(regex) || []
+      const bParts = b.name.match(regex) || []
+      const minLength = Math.min(aParts.length, bParts.length)
+      for (let i = 0; i < minLength; i++) {
+        const aPart = aParts[i]
+        const bPart = bParts[i]
+        const aNum = parseInt(aPart, 10)
+        const bNum = parseInt(bPart, 10)
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          if (aNum !== bNum) return aNum - bNum
+        } else {
+          const comparison = aPart.localeCompare(bPart, undefined, { numeric: true, sensitivity: 'base' })
+          if (comparison !== 0) return comparison
+        }
+      }
+      return aParts.length - bParts.length
+    })
+
+  // Get liveries for selected aircraft type
+  const availableLiveries = selectedAircraftTypeId
+    ? liveries
+        .filter(l => l.aircraftType.id === selectedAircraftTypeId)
+        .sort((a, b) => {
+          // Natural sort
+          const regex = /(\d+|\D+)/g
+          const aParts = a.name.match(regex) || []
+          const bParts = b.name.match(regex) || []
+          const minLength = Math.min(aParts.length, bParts.length)
+          for (let i = 0; i < minLength; i++) {
+            const aPart = aParts[i]
+            const bPart = bParts[i]
+            const aNum = parseInt(aPart, 10)
+            const bNum = parseInt(bPart, 10)
+            if (!isNaN(aNum) && !isNaN(bNum)) {
+              if (aNum !== bNum) return aNum - bNum
+            } else {
+              const comparison = aPart.localeCompare(bPart, undefined, { numeric: true, sensitivity: 'base' })
+              if (comparison !== 0) return comparison
+            }
+          }
+          return aParts.length - bParts.length
+        })
+    : []
+
   // Format flight time from minutes to hours
   const formatFlightTimeHours = (totalMinutes: number) => {
     return Math.floor(totalMinutes / 60)
@@ -190,8 +319,9 @@ export default function CrewCenterPage() {
     // Validate required fields
     if (!pirepFormData.flightDate || !pirepFormData.flightNumber || 
         !pirepFormData.flightTimeHours || !pirepFormData.flightTimeMinutes ||
-        !pirepFormData.departureAirport || !pirepFormData.arrivalAirport || !selectedLiveryId) {
-      alert('Please fill in all required fields and select an aircraft & livery')
+        !pirepFormData.departureAirport || !pirepFormData.arrivalAirport || 
+        !selectedAircraftTypeId || !selectedLiveryId) {
+      alert('Please fill in all required fields and select an aircraft type and livery')
       return
     }
 
@@ -228,8 +358,14 @@ export default function CrewCenterPage() {
       }
 
       // Reset form and close modal
+      const today = new Date()
+      const year = today.getFullYear()
+      const month = String(today.getMonth() + 1).padStart(2, '0')
+      const day = String(today.getDate()).padStart(2, '0')
+      const todayString = `${year}-${month}-${day}`
+      
       setPirepFormData({
-        flightDate: '',
+        flightDate: todayString,
         flightNumber: '',
         flightTimeHours: '',
         flightTimeMinutes: '',
@@ -239,6 +375,7 @@ export default function CrewCenterPage() {
         multiplierCode: '',
         comment: '',
       })
+      setSelectedAircraftTypeId('')
       setSelectedLiveryId('')
       setIsPirepModalOpen(false)
       
@@ -375,6 +512,7 @@ export default function CrewCenterPage() {
                   <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
                   <button
                     onClick={() => {
+                      setSelectedAircraftTypeId('')
                       setSelectedLiveryId('')
                       setIsPirepModalOpen(true)
                     }}
@@ -488,7 +626,68 @@ export default function CrewCenterPage() {
                     Back to Dashboard
                   </button>
                 </div>
-                <p className="text-gray-600">Flight log functionality will be implemented here.</p>
+                
+                {isLoadingFlights ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    <span className="ml-3 text-gray-600">Loading flights...</span>
+                  </div>
+                ) : approvedFlights.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Plane className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 text-lg">No approved flights yet</p>
+                    <p className="text-gray-500 text-sm mt-2">Your approved PIREPs will appear here</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-gray-200">
+                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
+                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Flight Number</th>
+                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Route</th>
+                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Aircraft</th>
+                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Flight Time</th>
+                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Livery</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {approvedFlights.map((flight) => (
+                            <tr 
+                              key={flight.id} 
+                              className="border-b border-gray-100 hover:bg-gray-50 transition cursor-pointer"
+                              onClick={() => {
+                                setSelectedFlightDetail(flight)
+                                setIsFlightDetailModalOpen(true)
+                              }}
+                            >
+                              <td className="py-3 px-4 text-gray-700">
+                                {new Date(flight.flightDate).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </td>
+                              <td className="py-3 px-4 text-gray-700 font-medium">{flight.flightNumber}</td>
+                              <td className="py-3 px-4 text-gray-700">
+                                <span className="font-semibold">{flight.departureAirport}</span>
+                                <span className="mx-2 text-gray-400">→</span>
+                                <span className="font-semibold">{flight.arrivalAirport}</span>
+                              </td>
+                              <td className="py-3 px-4 text-gray-700">{flight.livery.aircraftType.name}</td>
+                              <td className="py-3 px-4 text-gray-700">{flight.flightTime}</td>
+                              <td className="py-3 px-4 text-gray-600">{flight.livery.name}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="mt-4 text-sm text-gray-500">
+                      Showing {approvedFlights.length} approved {approvedFlights.length === 1 ? 'flight' : 'flights'}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -563,6 +762,17 @@ export default function CrewCenterPage() {
               <h2 className="text-2xl font-bold text-gray-900">File PIREP</h2>
               <button
                 onClick={() => {
+                  const today = new Date()
+                  const year = today.getFullYear()
+                  const month = String(today.getMonth() + 1).padStart(2, '0')
+                  const day = String(today.getDate()).padStart(2, '0')
+                  const todayString = `${year}-${month}-${day}`
+                  
+                  setPirepFormData(prev => ({
+                    ...prev,
+                    flightDate: todayString
+                  }))
+                  setSelectedAircraftTypeId('')
                   setSelectedLiveryId('')
                   setIsPirepModalOpen(false)
                 }}
@@ -577,14 +787,21 @@ export default function CrewCenterPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Flight Date <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="date"
-                  name="flightDate"
-                  value={pirepFormData.flightDate}
-                  onChange={handlePirepFormChange}
-                  required
-                  className="w-full px-3 py-2 neon-input border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white text-gray-900"
-                />
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
+                  <input
+                    type="date"
+                    name="flightDate"
+                    value={pirepFormData.flightDate}
+                    onChange={handlePirepFormChange}
+                    required
+                    lang="en-US"
+                    className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-white text-gray-900 text-sm font-medium shadow-sm hover:border-gray-400 transition-colors"
+                    style={{
+                      colorScheme: 'light',
+                    }}
+                  />
+                </div>
               </div>
 
               <div>
@@ -671,66 +888,65 @@ export default function CrewCenterPage() {
                 </div>
               </div>
 
+              {/* Flight Route Map Preview */}
+              {pirepFormData.departureAirport.trim().length === 4 && pirepFormData.arrivalAirport.trim().length === 4 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Route Preview
+                  </label>
+                  <FlightRouteMap
+                    departureAirport={pirepFormData.departureAirport}
+                    arrivalAirport={pirepFormData.arrivalAirport}
+                  />
+                </div>
+              )}
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Aircraft (Aircraft Type & Livery) <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Aircraft Type <span className="text-red-500">*</span>
                 </label>
-                {Object.keys(groupedLiveries).length === 0 ? (
-                  <p className="text-xs text-gray-500">No liveries available. Please contact admin.</p>
-                ) : (
-                  <div className="max-h-96 overflow-y-auto border border-gray-300 rounded-md p-4 space-y-4 bg-white">
-                    {Object.entries(groupedLiveries)
-                      .sort(([a], [b]) => {
-                        // Natural sort for aircraft types
-                        const regex = /(\d+|\D+)/g
-                        const aParts = a.match(regex) || []
-                        const bParts = b.match(regex) || []
-                        const minLength = Math.min(aParts.length, bParts.length)
-                        for (let i = 0; i < minLength; i++) {
-                          const aPart = aParts[i]
-                          const bPart = bParts[i]
-                          const aNum = parseInt(aPart, 10)
-                          const bNum = parseInt(bPart, 10)
-                          if (!isNaN(aNum) && !isNaN(bNum)) {
-                            if (aNum !== bNum) return aNum - bNum
-                          } else {
-                            const comparison = aPart.localeCompare(bPart, undefined, { numeric: true, sensitivity: 'base' })
-                            if (comparison !== 0) return comparison
-                          }
-                        }
-                        return aParts.length - bParts.length
-                      })
-                      .map(([aircraftTypeName, liveries]) => (
-                        <div key={aircraftTypeName} className="border-b border-gray-200 pb-4 last:border-0">
-                          <h4 className="font-semibold text-gray-900 mb-2 text-sm">{aircraftTypeName}</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 ml-4">
-                            {liveries.map((livery) => (
-                              <label
-                                key={livery.id}
-                                className={`flex items-center space-x-2 p-2 rounded-md cursor-pointer transition ${
-                                  selectedLiveryId === livery.id
-                                    ? 'bg-primary/10 border-2 border-primary'
-                                    : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
-                                }`}
-                              >
-                                <input
-                                  type="radio"
-                                  name="liveryId"
-                                  value={livery.id}
-                                  checked={selectedLiveryId === livery.id}
-                                  onChange={(e) => setSelectedLiveryId(e.target.value)}
-                                  className="w-4 h-4 text-primary focus:ring-primary cursor-pointer"
-                                />
-                                <span className="text-sm text-gray-700">{livery.name}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                  </div>
+                <select
+                  name="aircraftTypeId"
+                  value={selectedAircraftTypeId}
+                  onChange={(e) => setSelectedAircraftTypeId(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white text-gray-900"
+                >
+                  <option value="">Select Aircraft Type</option>
+                  {aircraftTypes.map((aircraftType) => (
+                    <option key={aircraftType.id} value={aircraftType.id}>
+                      {aircraftType.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Livery <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="liveryId"
+                  value={selectedLiveryId}
+                  onChange={(e) => setSelectedLiveryId(e.target.value)}
+                  required
+                  disabled={!selectedAircraftTypeId}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">
+                    {selectedAircraftTypeId ? 'Select Livery' : 'Please select Aircraft Type first'}
+                  </option>
+                  {availableLiveries.map((livery) => (
+                    <option key={livery.id} value={livery.id}>
+                      {livery.name}
+                    </option>
+                  ))}
+                </select>
+                {!selectedAircraftTypeId && (
+                  <p className="text-xs text-gray-500 mt-1">Please select an Aircraft Type first</p>
                 )}
-                {!selectedLiveryId && (
-                  <p className="text-xs text-red-500 mt-2">Please select an aircraft and livery</p>
+                {selectedAircraftTypeId && !selectedLiveryId && (
+                  <p className="text-xs text-red-500 mt-1">Please select a Livery</p>
                 )}
               </div>
 
@@ -766,6 +982,17 @@ export default function CrewCenterPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    const today = new Date()
+                    const year = today.getFullYear()
+                    const month = String(today.getMonth() + 1).padStart(2, '0')
+                    const day = String(today.getDate()).padStart(2, '0')
+                    const todayString = `${year}-${month}-${day}`
+                    
+                    setPirepFormData(prev => ({
+                      ...prev,
+                      flightDate: todayString
+                    }))
+                    setSelectedAircraftTypeId('')
                     setSelectedLiveryId('')
                     setIsPirepModalOpen(false)
                   }}
@@ -783,6 +1010,153 @@ export default function CrewCenterPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Flight Detail Modal */}
+      {isFlightDetailModalOpen && selectedFlightDetail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="neon-modal rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900">Flight Details</h2>
+              <button
+                onClick={() => {
+                  setSelectedFlightDetail(null)
+                  setIsFlightDetailModalOpen(false)
+                }}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Flight Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Flight Date
+                  </label>
+                  <p className="text-gray-900 font-semibold">
+                    {new Date(selectedFlightDetail.flightDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Flight Number
+                  </label>
+                  <p className="text-gray-900 font-semibold">{selectedFlightDetail.flightNumber}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Departure Airport
+                  </label>
+                  <p className="text-gray-900 font-semibold text-lg">{selectedFlightDetail.departureAirport}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Arrival Airport
+                  </label>
+                  <p className="text-gray-900 font-semibold text-lg">{selectedFlightDetail.arrivalAirport}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Aircraft Type
+                  </label>
+                  <p className="text-gray-900 font-semibold">{selectedFlightDetail.livery.aircraftType.name}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Livery
+                  </label>
+                  <p className="text-gray-900 font-semibold">{selectedFlightDetail.livery.name}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Flight Time
+                  </label>
+                  <p className="text-gray-900 font-semibold">{selectedFlightDetail.flightTime}</p>
+                </div>
+
+                {selectedFlightDetail.multiplierCode && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Multiplier Code
+                    </label>
+                    <p className="text-gray-900 font-semibold">{selectedFlightDetail.multiplierCode}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Comment */}
+              {selectedFlightDetail.comment && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-2">
+                    Comment
+                  </label>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-gray-700 whitespace-pre-wrap">{selectedFlightDetail.comment}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Admin Comment */}
+              {selectedFlightDetail.adminComment && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-2">
+                    Admin Comment
+                  </label>
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <p className="text-gray-700 whitespace-pre-wrap">{selectedFlightDetail.adminComment}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Status and Review Info */}
+              <div className="pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                      Approved
+                    </span>
+                  </div>
+                  {selectedFlightDetail.reviewedAt && (
+                    <p className="text-sm text-gray-500">
+                      Reviewed on {new Date(selectedFlightDetail.reviewedAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end">
+              <button
+                onClick={() => {
+                  setSelectedFlightDetail(null)
+                  setIsFlightDetailModalOpen(false)
+                }}
+                className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark transition"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

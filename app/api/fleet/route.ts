@@ -39,20 +39,23 @@ function naturalSort(a: string, b: string): number {
 // Public endpoint to get all active liveries (for dropdown in PIREP form)
 export async function GET(request: NextRequest) {
   try {
-    const liveries = await prisma.livery.findMany({
-      where: {
-        isActive: true,
-        aircraftType: {
-          isActive: true,
-        },
-      },
+    // Get all liveries and filter in memory to handle null/undefined isActive values
+    // (treat null/undefined as true for backward compatibility)
+    const allLiveries = await prisma.livery.findMany({
       include: {
         aircraftType: true,
       },
     })
 
+    // Filter to only include liveries where both livery and aircraftType are active
+    // (treat null/undefined as true for backward compatibility)
+    const activeLiveries = allLiveries.filter(
+      livery => (livery.isActive ?? true) === true && 
+                 (livery.aircraftType.isActive ?? true) === true
+    )
+
     // Sort by aircraft type name (natural sort), then by livery name (natural sort)
-    const sortedLiveries = liveries.sort((a, b) => {
+    const sortedLiveries = activeLiveries.sort((a, b) => {
       const aircraftTypeComparison = naturalSort(a.aircraftType.name, b.aircraftType.name)
       if (aircraftTypeComparison !== 0) {
         return aircraftTypeComparison
