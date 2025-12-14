@@ -47,7 +47,7 @@ export default function PilotDetailPage() {
   const [transferMinutesInput, setTransferMinutesInput] = useState('')
   const [flightTimeMinutes, setFlightTimeMinutes] = useState(0)
   const [isStaff, setIsStaff] = useState(false)
-  const [isOwner, setIsOwner] = useState(false)
+  const [hasOwnerPermission, setHasOwnerPermission] = useState(false)
   const [isExecutive, setIsExecutive] = useState(false)
   const [isSavingCallsign, setIsSavingCallsign] = useState(false)
   const [isAddingHours, setIsAddingHours] = useState(false)
@@ -150,7 +150,7 @@ export default function PilotDetailPage() {
       setDisplayName(userData.displayName || '')
       setEmail(userData.email || '')
       setIsStaff(userData.role === 'admin' || userData.role === 'owner')
-      setIsOwner(userData.role === 'owner')
+      setHasOwnerPermission(userData.role === 'owner')
       setIsExecutive(false) // TODO: Load from actual data source
       setStaffRole(userData.rank || '') // Load staff role from rank field
       
@@ -218,15 +218,15 @@ export default function PilotDetailPage() {
       
       // Update local state based on new role
       if (data.role === 'owner') {
-        setIsOwner(true)
+        setHasOwnerPermission(true)
         setIsStaff(true) // Owner includes staff
         setIsExecutive(false)
       } else if (data.role === 'admin') {
-        setIsOwner(false)
+        setHasOwnerPermission(false)
         setIsStaff(true)
         setIsExecutive(false)
       } else {
-        setIsOwner(false)
+        setHasOwnerPermission(false)
         setIsStaff(false)
         setIsExecutive(false)
         // When staff is disabled, clear the role but don't delete it from database
@@ -245,7 +245,7 @@ export default function PilotDetailPage() {
       alert(error.message || `Failed to update ${permissionType} permission`)
       // Revert the state change on error
       if (permissionType === 'staff') setIsStaff(!value)
-      if (permissionType === 'owner') setIsOwner(!value)
+      if (permissionType === 'owner') setHasOwnerPermission(!value)
       if (permissionType === 'executive') setIsExecutive(!value)
     }
   }
@@ -894,17 +894,17 @@ export default function PilotDetailPage() {
                   </div>
                   <button
                     onClick={async () => {
-                      const newValue = !isOwner
-                      setIsOwner(newValue)
+                      const newValue = !hasOwnerPermission
+                      setHasOwnerPermission(newValue)
                       await updatePermission('owner', newValue)
                     }}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
-                      isOwner ? 'bg-primary' : 'bg-gray-300'
+                      hasOwnerPermission ? 'bg-primary' : 'bg-gray-300'
                     }`}
                   >
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        isOwner ? 'translate-x-6' : 'translate-x-1'
+                        hasOwnerPermission ? 'translate-x-6' : 'translate-x-1'
                       }`}
                     />
                   </button>

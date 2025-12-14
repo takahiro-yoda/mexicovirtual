@@ -164,6 +164,33 @@ export async function PATCH(
       updateData.adminComment = adminComment || null
     }
 
+    // Get current PIREP to check status change
+    const currentPirep = await prisma.pirep.findUnique({
+      where: { id: params.pirepId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            displayName: true,
+            infiniteFlightUsername: true,
+          },
+        },
+        livery: {
+          include: {
+            aircraftType: true,
+          },
+        },
+      },
+    })
+
+    if (!currentPirep) {
+      return NextResponse.json(
+        { error: 'PIREP not found' },
+        { status: 404 }
+      )
+    }
+
     const updatedPirep = await prisma.pirep.update({
       where: { id: params.pirepId },
       data: updateData,
@@ -183,6 +210,128 @@ export async function PATCH(
         },
       },
     })
+
+    // Update user statistics if status changed to/from approved
+    if (status && status !== currentPirep.status) {
+      const userId = currentPirep.userId
+      
+      // Parse flight time from "XXhrXXmin" format to minutes
+      const parseFlightTime = (flightTime: string): number => {
+        const match = flightTime.match(/(\d+)hr(\d+)min/)
+        if (match) {
+          const hours = parseInt(match[1], 10)
+          const minutes = parseInt(match[2], 10)
+          return hours * 60 + minutes
+        }
+        return 0
+      }
+
+      const flightTimeMinutes = parseFlightTime(currentPirep.flightTime)
+
+      // Get or create user statistics
+      let userStats = await prisma.userStatistics.findUnique({
+        where: { userId },
+      })
+
+      if (!userStats) {
+        userStats = await prisma.userStatistics.create({
+          data: {
+            userId,
+            totalFlightTimeMinutes: 0,
+            totalFlights: 0,
+            totalDistanceKm: 0,
+            visitedAirports: "[]",
+            aircraftTypes: "[]",
+          },
+        })
+      }
+
+      // Parse existing arrays
+      let visitedAirports: string[] = []
+      let aircraftTypes: string[] = []
+      try {
+        visitedAirports = typeof userStats.visitedAirports === 'string'
+          ? JSON.parse(userStats.visitedAirports)
+          : userStats.visitedAirports || []
+        aircraftTypes = typeof userStats.aircraftTypes === 'string'
+          ? JSON.parse(userStats.aircraftTypes)
+          : userStats.aircraftTypes || []
+      } catch (error) {
+        console.error('Error parsing JSON arrays:', error)
+        visitedAirports = []
+        aircraftTypes = []
+      }
+
+      if (status === 'approved' && currentPirep.status !== 'approved') {
+        // Add flight statistics
+        await prisma.userStatistics.update({
+          where: { userId },
+          data: {
+            totalFlightTimeMinutes: {
+              increment: flightTimeMinutes,
+            },
+            totalFlights: {
+              increment: 1,
+            },
+            lastFlightDate: new Date(currentPirep.flightDate),
+            // Update visited airports
+            visitedAirports: JSON.stringify([
+              ...new Set([
+                ...visitedAirports,
+                currentPirep.departureAirport,
+                currentPirep.arrivalAirport,
+                ...(currentPirep.waypoints ? (() => {
+                  try {
+                    return JSON.parse(currentPirep.waypoints) as string[]
+                  } catch {
+                    return []
+                  }
+                })() : []),
+              ]),
+            ]),
+            // Update aircraft types
+            aircraftTypes: JSON.stringify([
+              ...new Set([
+                ...aircraftTypes,
+                currentPirep.livery.aircraftType.name,
+              ]),
+            ]),
+          },
+        })
+      } else if (currentPirep.status === 'approved' && status !== 'approved') {
+        // Remove flight statistics (if status changed from approved to something else)
+        const newVisitedAirports = visitedAirports.filter(
+          (airport) =>
+            airport !== currentPirep.departureAirport &&
+            airport !== currentPirep.arrivalAirport &&
+            !(currentPirep.waypoints ? (() => {
+              try {
+                return JSON.parse(currentPirep.waypoints) as string[]
+              } catch {
+                return []
+              }
+            })() : []).includes(airport)
+        )
+        
+        const newAircraftTypes = aircraftTypes.filter(
+          (type) => type !== currentPirep.livery.aircraftType.name
+        )
+
+        await prisma.userStatistics.update({
+          where: { userId },
+          data: {
+            totalFlightTimeMinutes: {
+              decrement: flightTimeMinutes,
+            },
+            totalFlights: {
+              decrement: 1,
+            },
+            visitedAirports: JSON.stringify(newVisitedAirports),
+            aircraftTypes: JSON.stringify(newAircraftTypes),
+          },
+        })
+      }
+    }
 
     return NextResponse.json({
       success: true,

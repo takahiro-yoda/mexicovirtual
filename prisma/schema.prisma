@@ -142,6 +142,7 @@ model Pirep {
   flightTime          String    // Format: "XXhrXXmin"
   departureAirport    String
   arrivalAirport      String
+  waypoints           String?   // JSON string array of ICAO codes: ["ICAO1", "ICAO2", ...]
   liveryId            String
   livery              Livery    @relation(fields: [liveryId], references: [id])
   multiplierCode      String?

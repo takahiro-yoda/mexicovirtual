@@ -10,17 +10,20 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 interface FlightRouteMapProps {
   departureAirport: string
   arrivalAirport: string
+  waypoints?: string[]
   className?: string
 }
 
 export default function FlightRouteMap({
   departureAirport,
   arrivalAirport,
+  waypoints,
   className = '',
 }: FlightRouteMapProps) {
   const mapRef = useRef<MapRef>(null)
   const [departureData, setDepartureData] = useState<AirportData | null>(null)
   const [arrivalData, setArrivalData] = useState<AirportData | null>(null)
+  const [waypointData, setWaypointData] = useState<AirportData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mapLoaded, setMapLoaded] = useState(false)
@@ -36,12 +39,14 @@ export default function FlightRouteMap({
 
     const dep = departureAirport.trim().toUpperCase()
     const arr = arrivalAirport.trim().toUpperCase()
+    const validWaypoints = waypoints?.filter(w => w.trim().length === 4).map(w => w.trim().toUpperCase()) || []
 
-    // 両方のICAOコードが4文字になるまで待つ
+    // Wait until both ICAO codes are 4 characters
     if (dep.length !== 4 || arr.length !== 4) {
       setLoading(false)
       setDepartureData(null)
       setArrivalData(null)
+      setWaypointData([])
       setError(null)
       return
     }
@@ -49,22 +54,32 @@ export default function FlightRouteMap({
     setLoading(true)
     setError(null)
 
-    // 空港データを取得（静的データを優先、見つからない場合はAPIから取得）
+    // Fetch airport data (prioritize static data, fallback to API if not found)
     const loadAirportData = async () => {
       try {
-        // 両方の空港データを並列で取得
-        const [depData, arrData] = await Promise.all([
+        // Fetch departure, arrival, and waypoint data in parallel
+        const airportPromises = [
           fetchAirportDataFromAPI(dep),
           fetchAirportDataFromAPI(arr),
-        ])
+          ...validWaypoints.map(wp => fetchAirportDataFromAPI(wp))
+        ]
+        
+        const airportData = await Promise.all(airportPromises)
+        const depData = airportData[0]
+        const arrData = airportData[1]
+        const waypointDataArray = airportData.slice(2) as AirportData[]
 
         setDepartureData(depData)
         setArrivalData(arrData)
+        setWaypointData(waypointDataArray.filter(d => d !== null))
 
         if (!depData) {
           setError(`Airport ${dep} not found`)
         } else if (!arrData) {
           setError(`Airport ${arr} not found`)
+        } else if (waypointDataArray.some(d => d === null)) {
+          const missingWaypoints = validWaypoints.filter((_, i) => airportData[i + 2] === null)
+          setError(`Waypoint(s) not found: ${missingWaypoints.join(', ')}`)
         } else {
           setError(null)
         }
@@ -77,33 +92,32 @@ export default function FlightRouteMap({
     }
 
     loadAirportData()
-  }, [departureAirport, arrivalAirport, mapboxToken])
+  }, [departureAirport, arrivalAirport, waypoints, mapboxToken])
 
-  // ルート全体を表示する関数
+  // Function to display entire route
   const fitRouteBounds = useCallback(() => {
     if (!mapRef.current || !departureData || !arrivalData) return
 
     try {
-      // 大圏航路の座標を計算
-      const routeCoordinates = calculateGreatCirclePath(
-        { latitude: departureData.latitude, longitude: departureData.longitude },
-        { latitude: arrivalData.latitude, longitude: arrivalData.longitude }
-      )
-
-      // すべての座標点を収集（空港の座標も含む）
-      const allCoordinates = [
-        ...routeCoordinates,
-        [departureData.longitude, departureData.latitude] as [number, number],
-        [arrivalData.longitude, arrivalData.latitude] as [number, number],
+      // Collect coordinates of all airports (departure, waypoints, arrival)
+      const allAirportCoordinates: [number, number][] = [
+        [departureData.longitude, departureData.latitude],
+        ...waypointData.map(wp => [wp.longitude, wp.latitude] as [number, number]),
+        [arrivalData.longitude, arrivalData.latitude],
       ]
 
-      // 緯度の範囲を計算
+      // Collect all coordinate points (including airport coordinates)
+      const allCoordinates = [
+        ...allAirportCoordinates,
+      ]
+
+      // Calculate latitude range
       const latitudes = allCoordinates.map(([, lat]) => lat)
       const minLat = Math.min(...latitudes)
       const maxLat = Math.max(...latitudes)
       const latRange = maxLat - minLat
 
-      // 経度の範囲を計算（日付変更線を考慮）
+      // Calculate longitude range (considering date line)
       const longitudes = allCoordinates.map(([lon]) => lon)
       const minLonRaw = Math.min(...longitudes)
       const maxLonRaw = Math.max(...longitudes)
@@ -114,68 +128,71 @@ export default function FlightRouteMap({
       let lonRange: number
 
       if (directRange > 180) {
-        // 日付変更線をまたぐ場合
-        // 経度を0-360に正規化して計算
+        // When crossing the date line
+        // Normalize longitude to 0-360 for calculation
         const normalized = longitudes.map(lon => lon < 0 ? lon + 360 : lon)
         const minNorm = Math.min(...normalized)
         const maxNorm = Math.max(...normalized)
         const normalizedRange = maxNorm - minNorm
 
         if (normalizedRange > 180) {
-          // 経度が360度近くに広がっている場合
-          // 実際には短い方の経路を取る必要がある
-          // 反対側の範囲を計算
+          // When longitude spreads near 360 degrees
+          // Actually need to take the shorter route
+          // Calculate the opposite side range
           const wrappedRange = 360 - normalizedRange
           if (wrappedRange < normalizedRange) {
-            // 反対側の方が短い場合
+            // When the opposite side is shorter
             minLon = maxNorm - 360
             maxLon = minNorm
             lonRange = wrappedRange
           } else {
-            // 正規化した範囲を使用
+            // Use normalized range
             minLon = minNorm - 360
             maxLon = maxNorm - 360
             lonRange = normalizedRange
           }
         } else {
-          // 正規化した範囲を使用
+          // Use normalized range
           minLon = minNorm - 360
           maxLon = maxNorm - 360
           lonRange = normalizedRange
         }
       } else {
-        // 通常の場合
+        // Normal case
         minLon = minLonRaw
         maxLon = maxLonRaw
         lonRange = directRange
       }
 
-      // 距離を計算
-      const distance = calculateDistance(
-        { latitude: departureData.latitude, longitude: departureData.longitude },
-        { latitude: arrivalData.latitude, longitude: arrivalData.longitude }
-      )
+      // Calculate total distance (departure → waypoint1 → waypoint2 → ... → arrival)
+      let totalDistance = 0
+      for (let i = 0; i < allAirportCoordinates.length - 1; i++) {
+        const start = { latitude: allAirportCoordinates[i][1], longitude: allAirportCoordinates[i][0] }
+        const end = { latitude: allAirportCoordinates[i + 1][1], longitude: allAirportCoordinates[i + 1][0] }
+        totalDistance += calculateDistance(start, end)
+      }
+      const distance = totalDistance
 
-      // 距離に応じたパディング率（長距離ほど大きく）
+      // Padding ratio based on distance (larger for longer distances)
       let paddingRatio = 0.12
       if (distance > 12000) {
-        paddingRatio = 0.25 // 超長距離は25%
+        paddingRatio = 0.25 // Ultra-long distance: 25%
       } else if (distance > 8000) {
-        paddingRatio = 0.2 // 長距離は20%
+        paddingRatio = 0.2 // Long distance: 20%
       } else if (distance > 5000) {
-        paddingRatio = 0.15 // 中距離は15%
+        paddingRatio = 0.15 // Medium distance: 15%
       }
 
       const lonPadding = Math.max(lonRange * paddingRatio, 2)
       const latPadding = Math.max(latRange * paddingRatio, 2)
 
-      // 境界を計算（世界の端を超えないように制限）
+      // Calculate bounds (limit to not exceed world edges)
       const bounds: [[number, number], [number, number]] = [
         [Math.max(minLon - lonPadding, -180), Math.max(minLat - latPadding, -85)],
         [Math.min(maxLon + lonPadding, 180), Math.min(maxLat + latPadding, 85)],
       ]
 
-      // 距離に基づいてmaxZoomを調整（長距離ほど低い）
+      // Adjust maxZoom based on distance (lower for longer distances)
       let maxZoomForDistance = 12
       if (distance > 15000) {
         maxZoomForDistance = 1
@@ -193,7 +210,7 @@ export default function FlightRouteMap({
         maxZoomForDistance = 5
       }
 
-      // fitBoundsを実行
+      // Execute fitBounds
       mapRef.current.fitBounds(bounds, {
         padding: {
           top: 50,
@@ -208,36 +225,36 @@ export default function FlightRouteMap({
     } catch (error) {
       console.error('Error in fitBounds:', error)
     }
-  }, [departureData, arrivalData])
+  }, [departureData, arrivalData, waypointData])
 
-  // マップのビューを更新 - ルート全体が見えるように調整
+  // Update map view - adjust to show entire route
   useEffect(() => {
     if (!mapLoaded || !departureData || !arrivalData) return
 
-    // 少し遅延させて実行（マップの描画を待つ）
+    // Execute with slight delay (wait for map rendering)
     const timer = setTimeout(() => {
       fitRouteBounds()
     }, 300)
 
     return () => clearTimeout(timer)
-  }, [departureData, arrivalData, mapLoaded, fitRouteBounds])
+  }, [departureData, arrivalData, waypointData, mapLoaded, fitRouteBounds])
 
-  // ズームイン
+  // Zoom in
   const handleZoomIn = useCallback(() => {
     if (!mapRef.current) return
     const currentZoom = mapRef.current.getZoom()
     mapRef.current.zoomTo(currentZoom + 1, { duration: 300 })
   }, [])
 
-  // ズームアウト
+  // Zoom out
   const handleZoomOut = useCallback(() => {
     if (!mapRef.current) return
     const currentZoom = mapRef.current.getZoom()
     mapRef.current.zoomTo(currentZoom - 1, { duration: 300 })
   }, [])
 
-  // 大圏航路を計算してルートの座標データを生成（メモ化してパフォーマンス向上）
-  // フックは常に同じ順序で呼び出される必要があるため、早期リターンの前に配置
+  // Calculate great circle route and generate route coordinate data (memoized for performance)
+  // Hooks must always be called in the same order, so place before early return
   const routeData = useMemo(() => {
     if (!departureData || !arrivalData) {
       return {
@@ -249,37 +266,51 @@ export default function FlightRouteMap({
         },
       }
     }
-    
-    const coords = calculateGreatCirclePath(
+
+    // If waypoints exist, connect each segment sequentially
+    const allAirports = [
       { latitude: departureData.latitude, longitude: departureData.longitude },
-      { latitude: arrivalData.latitude, longitude: arrivalData.longitude }
-    )
+      ...waypointData.map(wp => ({ latitude: wp.latitude, longitude: wp.longitude })),
+      { latitude: arrivalData.latitude, longitude: arrivalData.longitude },
+    ]
+
+    // Combine coordinates of each segment
+    const allCoords: [number, number][] = []
+    for (let i = 0; i < allAirports.length - 1; i++) {
+      const segmentCoords = calculateGreatCirclePath(allAirports[i], allAirports[i + 1])
+      // Skip the first point for segments after the first (to avoid duplicates)
+      if (i === 0) {
+        allCoords.push(...segmentCoords)
+      } else {
+        allCoords.push(...segmentCoords.slice(1))
+      }
+    }
     
-    // 日付変更線をまたぐ場合の処理
-    // 経度が180度をまたぐ場合、ルートを2つのLineStringに分割する必要がある
-    const crossesDateLine = coords.some((coord, i) => {
+    // Handle date line crossing
+    // When longitude crosses 180 degrees, split route into two LineStrings
+    const crossesDateLine = allCoords.some((coord, i) => {
       if (i === 0) return false
-      const prevLon = coords[i - 1][0]
+      const prevLon = allCoords[i - 1][0]
       const currLon = coord[0]
       return Math.abs(currLon - prevLon) > 180
     })
 
     if (crossesDateLine) {
-      // 日付変更線をまたぐ場合、MultiLineStringとして扱う
-      // 経度が跳ぶ位置で分割
+      // When crossing date line, treat as MultiLineString
+      // Split at position where longitude jumps
       const segments: [number, number][][] = []
-      let currentSegment: [number, number][] = [coords[0]]
+      let currentSegment: [number, number][] = [allCoords[0]]
 
-      for (let i = 1; i < coords.length; i++) {
-        const prevLon = coords[i - 1][0]
-        const currLon = coords[i][0]
+      for (let i = 1; i < allCoords.length; i++) {
+        const prevLon = allCoords[i - 1][0]
+        const currLon = allCoords[i][0]
         
         if (Math.abs(currLon - prevLon) > 180) {
-          // 日付変更線をまたいだ位置で分割
+          // Split at position where date line is crossed
           segments.push(currentSegment)
-          currentSegment = [coords[i]]
+          currentSegment = [allCoords[i]]
         } else {
-          currentSegment.push(coords[i])
+          currentSegment.push(allCoords[i])
         }
       }
       
@@ -302,41 +333,49 @@ export default function FlightRouteMap({
       properties: {},
       geometry: {
         type: 'LineString' as const,
-        coordinates: coords,
+        coordinates: allCoords,
       },
     }
-  }, [departureData, arrivalData])
+  }, [departureData, arrivalData, waypointData])
 
-  // 初期ビュー状態を計算（fitBoundsが実行されるまでの一時的な表示）
+  // Calculate initial view state (temporary display until fitBounds is executed)
   const initialCenter: [number, number] = useMemo(() => {
     if (!departureData || !arrivalData) return [0, 0]
-    // 中心点を計算（日付変更線を考慮）
-    let centerLon = (departureData.longitude + arrivalData.longitude) / 2
-    // 日付変更線をまたぐ場合、中心点を調整
-    if (Math.abs(departureData.longitude - arrivalData.longitude) > 180) {
-      if (centerLon < 0) {
-        centerLon += 180
-      } else {
-        centerLon -= 180
-      }
-    }
-    return [
-      centerLon,
-      (departureData.latitude + arrivalData.latitude) / 2,
+    
+    // Collect coordinates of all airports
+    const allAirports = [
+      { latitude: departureData.latitude, longitude: departureData.longitude },
+      ...waypointData.map(wp => ({ latitude: wp.latitude, longitude: wp.longitude })),
+      { latitude: arrivalData.latitude, longitude: arrivalData.longitude },
     ]
-  }, [departureData, arrivalData])
+    
+    // Calculate center point (average of all airports)
+    const avgLat = allAirports.reduce((sum, ap) => sum + ap.latitude, 0) / allAirports.length
+    const avgLon = allAirports.reduce((sum, ap) => sum + ap.longitude, 0) / allAirports.length
+    
+    return [avgLon, avgLat]
+  }, [departureData, arrivalData, waypointData])
 
   const initialZoom = useMemo(() => {
     if (!departureData || !arrivalData) return 2
-    const distance = calculateDistance(
+    
+    // Calculate total distance
+    const allAirports = [
       { latitude: departureData.latitude, longitude: departureData.longitude },
-      { latitude: arrivalData.latitude, longitude: arrivalData.longitude }
-    )
-    // 初期ズームは低めに設定（fitBoundsがすぐに調整する）
-    if (distance > 10000) return 2
-    if (distance > 5000) return 3
+      ...waypointData.map(wp => ({ latitude: wp.latitude, longitude: wp.longitude })),
+      { latitude: arrivalData.latitude, longitude: arrivalData.longitude },
+    ]
+    
+    let totalDistance = 0
+    for (let i = 0; i < allAirports.length - 1; i++) {
+      totalDistance += calculateDistance(allAirports[i], allAirports[i + 1])
+    }
+    
+    // Set initial zoom low (fitBounds will adjust immediately)
+    if (totalDistance > 10000) return 2
+    if (totalDistance > 5000) return 3
     return 4
-  }, [departureData, arrivalData])
+  }, [departureData, arrivalData, waypointData])
 
   if (!mapboxToken) {
     return (
@@ -350,7 +389,7 @@ export default function FlightRouteMap({
   const arr = arrivalAirport.trim().toUpperCase()
   const bothAirportsEntered = dep.length === 4 && arr.length === 4
 
-  // 両方のICAOコードが4文字でない場合は何も表示しない
+  // Don't display anything if both ICAO codes are not 4 characters
   if (!bothAirportsEntered) {
     return null
   }
@@ -395,7 +434,7 @@ export default function FlightRouteMap({
         dragRotate={false}
         touchZoomRotate={false}
       >
-        {/* ルート線 */}
+        {/* Route Line */}
         <Source id="route" type="geojson" data={routeData}>
           <Layer
             id="route-layer"
@@ -411,7 +450,7 @@ export default function FlightRouteMap({
           />
         </Source>
 
-        {/* 出発空港マーカー */}
+        {/* Departure Airport Marker */}
         <Marker
           longitude={departureData.longitude}
           latitude={departureData.latitude}
@@ -425,7 +464,24 @@ export default function FlightRouteMap({
           </div>
         </Marker>
 
-        {/* 到着空港マーカー */}
+        {/* Waypoint Markers */}
+        {waypointData.map((waypoint, index) => (
+          <Marker
+            key={`waypoint-${index}`}
+            longitude={waypoint.longitude}
+            latitude={waypoint.latitude}
+            anchor="bottom"
+          >
+            <div className="relative">
+              <div className="w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-lg"></div>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 bg-blue-500 text-white text-xs rounded whitespace-nowrap">
+                {waypoint.icao}
+              </div>
+            </div>
+          </Marker>
+        ))}
+
+        {/* Arrival Airport Marker */}
         <Marker
           longitude={arrivalData.longitude}
           latitude={arrivalData.latitude}
@@ -440,12 +496,17 @@ export default function FlightRouteMap({
         </Marker>
       </Map>
 
-      {/* マップコントロールボタン */}
+      {/* Map Control Buttons */}
       {!loading && !error && departureData && arrivalData && (
         <div className="absolute top-2 right-2 flex flex-col gap-2 z-10">
-          {/* ルート全体を表示ボタン */}
+          {/* Fit route to view button */}
           <button
-            onClick={fitRouteBounds}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              fitRouteBounds()
+            }}
             className="bg-white hover:bg-gray-100 text-gray-700 rounded-md p-2 shadow-lg border border-gray-300 transition-colors"
             title="Fit route to view"
             aria-label="Fit route to view"
@@ -453,9 +514,14 @@ export default function FlightRouteMap({
             <Maximize2 className="w-4 h-4" />
           </button>
           
-          {/* ズームイン */}
+          {/* Zoom in */}
           <button
-            onClick={handleZoomIn}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleZoomIn()
+            }}
             className="bg-white hover:bg-gray-100 text-gray-700 rounded-md p-2 shadow-lg border border-gray-300 transition-colors"
             title="Zoom in"
             aria-label="Zoom in"
@@ -463,9 +529,14 @@ export default function FlightRouteMap({
             <ZoomIn className="w-4 h-4" />
           </button>
           
-          {/* ズームアウト */}
+          {/* Zoom out */}
           <button
-            onClick={handleZoomOut}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleZoomOut()
+            }}
             className="bg-white hover:bg-gray-100 text-gray-700 rounded-md p-2 shadow-lg border border-gray-300 transition-colors"
             title="Zoom out"
             aria-label="Zoom out"

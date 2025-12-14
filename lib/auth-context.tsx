@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         setUser(user)
         
-        if (user) {
+        if (user && user.email) {
           // Sync user to Prisma database automatically
           try {
             await fetch('/api/users/sync', {
@@ -57,16 +57,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setRole('owner')
             setPermissions(getUserPermissions('owner'))
           } else {
-            // Get role from Firebase token
+            // Get role from database first (most reliable)
             try {
-              const userRole = await getUserRole()
-              const finalRole = userRole || 'user'
-              setRole(finalRole as UserRole)
-              setPermissions(getUserPermissions(finalRole))
+              const response = await fetch(`/api/users/by-email/${encodeURIComponent(user.email)}`)
+              if (response.ok) {
+                const userData = await response.json()
+                if (userData.role) {
+                  const dbRole = userData.role as UserRole
+                  setRole(dbRole)
+                  setPermissions(getUserPermissions(dbRole))
+                } else {
+                  // Fallback to Firebase token if no role in database
+                  const userRole = await getUserRole()
+                  const finalRole = userRole || 'user'
+                  setRole(finalRole as UserRole)
+                  setPermissions(getUserPermissions(finalRole))
+                }
+              } else {
+                // Fallback to Firebase token if database fetch fails
+                const userRole = await getUserRole()
+                const finalRole = userRole || 'user'
+                setRole(finalRole as UserRole)
+                setPermissions(getUserPermissions(finalRole))
+              }
             } catch (error) {
-              console.error('Error getting user role:', error)
-              setRole('user')
-              setPermissions(getUserPermissions('user'))
+              console.error('Error getting user role from database:', error)
+              // Fallback to Firebase token
+              try {
+                const userRole = await getUserRole()
+                const finalRole = userRole || 'user'
+                setRole(finalRole as UserRole)
+                setPermissions(getUserPermissions(finalRole))
+              } catch (fallbackError) {
+                console.error('Error getting user role from Firebase:', fallbackError)
+                setRole('user')
+                setPermissions(getUserPermissions('user'))
+              }
             }
           }
         } else {

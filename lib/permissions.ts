@@ -2,7 +2,7 @@
  * Permission and role management utilities
  */
 
-export type UserRole = 'user' | 'admin' | 'owner'
+export type UserRole = 'user' | 'admin' | 'owner' | 'staff'
 
 export interface UserPermissions {
   role: UserRole
@@ -19,10 +19,10 @@ export function isOwner(role?: string | null): boolean {
 }
 
 /**
- * Check if user has admin role (includes owner)
+ * Check if user has admin role (includes owner and staff)
  */
 export function isAdmin(role?: string | null): boolean {
-  return role === 'admin' || role === 'owner'
+  return role === 'admin' || role === 'owner' || role === 'staff'
 }
 
 /**
@@ -35,7 +35,7 @@ export function hasRole(userRole?: string | null, requiredRole: UserRole = 'user
     return userRole === 'owner'
   }
   if (requiredRole === 'admin') {
-    return userRole === 'admin' || userRole === 'owner'
+    return userRole === 'admin' || userRole === 'owner' || userRole === 'staff'
   }
   return true // user role - everyone has it
 }

@@ -18,6 +18,11 @@ export default function CrewCenterLayout({
     // Only redirect if we're not on the login or register page
     const isAuthPage = pathname === '/crew-center/login' || pathname === '/crew-center/register'
     
+    // Reset isRedirecting when we reach an auth page or when user is logged in
+    if (isAuthPage || user) {
+      setIsRedirecting(false)
+    }
+    
     if (!loading && !user && !isAuthPage && !isRedirecting) {
       setIsRedirecting(true)
       router.replace('/crew-center/login')
@@ -25,7 +30,9 @@ export default function CrewCenterLayout({
   }, [user, loading, router, isRedirecting, pathname])
 
   // Show loading screen while checking authentication
-  if (loading || (isRedirecting && !user)) {
+  // Don't show loading if we're on an auth page (login/register)
+  const isAuthPage = pathname === '/crew-center/login' || pathname === '/crew-center/register'
+  if (loading || (isRedirecting && !user && !isAuthPage)) {
     return (
       <div className="fixed inset-0 bg-gray-50 flex items-center justify-center z-50">
         <div className="text-center">

@@ -26,7 +26,9 @@ import {
   MessageSquare,
   Search,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Mail,
+  Award
 } from 'lucide-react'
 import { isAdmin, isOwner } from '@/lib/permissions'
 import Link from 'next/link'
@@ -53,6 +55,13 @@ interface ApplicationData {
   totalFlightTime?: number | null
   yearsOfExperience?: number | null
   motivation?: string
+  reviewedBy?: string | null
+  reviewedAt?: string | null
+  user?: {
+    id: string
+    email: string
+    displayName: string | null
+  } | null
 }
 
 interface AircraftTypeData {
@@ -143,6 +152,11 @@ export default function AdminPage() {
   const [isPirepModalOpen, setIsPirepModalOpen] = useState(false)
   const [adminComment, setAdminComment] = useState('')
   const [isUpdatingPirep, setIsUpdatingPirep] = useState(false)
+  const [selectedApplication, setSelectedApplication] = useState<ApplicationData | null>(null)
+  const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false)
+  const [isUpdatingApplication, setIsUpdatingApplication] = useState(false)
+  const [applicationStatusFilter, setApplicationStatusFilter] = useState<string>('all')
+  const [applicationSearchQuery, setApplicationSearchQuery] = useState('')
   const [userSearchQuery, setUserSearchQuery] = useState('')
   const [fleetSearchQuery, setFleetSearchQuery] = useState('')
   const [expandedAircraftTypes, setExpandedAircraftTypes] = useState<Set<string>>(new Set())
@@ -170,6 +184,27 @@ export default function AdminPage() {
       return
     }
   }, [user, loading, role, router])
+
+  // Prevent background scrolling when any modal is open
+  useEffect(() => {
+    if (isPirepModalOpen || isAircraftTypeModalOpen || isLiveryModalOpen || isImportModalOpen) {
+      // Save current scroll position
+      const scrollY = window.scrollY
+      document.body.style.position = 'fixed'
+      document.body.style.top = `-${scrollY}px`
+      document.body.style.width = '100%'
+      document.body.style.overflow = 'hidden'
+      
+      return () => {
+        // Restore scroll position when modal closes
+        document.body.style.position = ''
+        document.body.style.top = ''
+        document.body.style.width = ''
+        document.body.style.overflow = ''
+        window.scrollTo(0, scrollY)
+      }
+    }
+  }, [isPirepModalOpen, isAircraftTypeModalOpen, isLiveryModalOpen, isImportModalOpen])
 
   const loadUsers = useCallback(async () => {
     setIsLoadingData(true)
@@ -228,7 +263,11 @@ export default function AdminPage() {
   const loadApplications = useCallback(async () => {
     setIsLoadingData(true)
     try {
-      const response = await fetch('/api/applications')
+      const url = applicationStatusFilter !== 'all' 
+        ? `/api/applications?status=${applicationStatusFilter}`
+        : '/api/applications'
+      
+      const response = await fetch(url)
       
       if (!response.ok) {
         console.error('Failed to load applications:', response.status, response.statusText)
@@ -245,13 +284,16 @@ export default function AdminPage() {
         email: app.email,
         status: app.status,
         createdAt: app.createdAt,
-        infiniteFlightUsername: app.ifcUsername || app.infiniteFlightUsername || '',
+        infiniteFlightUsername: app.infiniteFlightUsername || app.ifcUsername || '',
         ifcUsername: app.ifcUsername || app.infiniteFlightUsername || '',
         discordUsername: app.discordUsername || '',
         grade: app.grade || null,
         totalFlightTime: app.totalFlightTime || null,
         yearsOfExperience: app.yearsOfExperience || null,
         motivation: app.motivation || '',
+        reviewedBy: app.reviewedBy || null,
+        reviewedAt: app.reviewedAt || null,
+        user: app.user || null,
       }))
       
       setApplications(applicationList)
@@ -263,7 +305,7 @@ export default function AdminPage() {
     } finally {
       setIsLoadingData(false)
     }
-  }, [])
+  }, [applicationStatusFilter])
 
   const loadStatistics = useCallback(async () => {
     setIsLoadingData(true)
@@ -648,6 +690,44 @@ export default function AdminPage() {
     }
   }
 
+  const handleApplicationStatusChange = async (applicationId: string, newStatus: 'pending' | 'approved' | 'rejected') => {
+    setIsUpdatingApplication(true)
+    try {
+      const response = await fetch(`/api/applications/${applicationId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          status: newStatus,
+          adminEmail: user?.email || null,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update application status')
+      }
+
+      // Reload applications
+      await loadApplications()
+      
+      // Update selected application if it's the one being updated
+      if (selectedApplication && selectedApplication.id === applicationId) {
+        setSelectedApplication({
+          ...selectedApplication,
+          status: newStatus,
+          reviewedAt: new Date().toISOString(),
+        })
+      }
+    } catch (error: any) {
+      console.error('Error updating application status:', error)
+      alert(`Failed to update application status: ${error.message}`)
+    } finally {
+      setIsUpdatingApplication(false)
+    }
+  }
+
   useEffect(() => {
     if (isLoadingData) return // Prevent concurrent calls
     if (loading) return // Wait for auth to finish
@@ -665,7 +745,7 @@ export default function AdminPage() {
       loadPireps()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, loading, role])
+  }, [activeTab, loading, role, applicationStatusFilter])
 
   if (loading) {
     return (
@@ -686,18 +766,18 @@ export default function AdminPage() {
 
   return (
     <div className="pt-20 min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
-              <p className="text-gray-600">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
+              <p className="text-sm sm:text-base text-gray-600">
                 {isOwnerUser ? 'Owner Control Panel' : 'Administrator Panel'}
               </p>
             </div>
             <Link
               href="/crew-center"
-              className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition"
+              className="flex items-center justify-center sm:justify-start space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition text-sm sm:text-base"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Dashboard</span>
@@ -707,87 +787,94 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="neon-card rounded-lg mb-6">
-          <div className="border-b border-gray-200">
-            <nav className="flex -mb-px">
+          <div className="border-b border-gray-200 overflow-x-auto">
+            <nav className="flex -mb-px min-w-max md:min-w-0">
               <button
                 onClick={() => setActiveTab('users')}
-                className={`px-6 py-4 font-medium text-sm border-b-2 transition ${
+                className={`px-3 md:px-6 py-3 md:py-4 font-medium text-xs md:text-sm border-b-2 transition whitespace-nowrap ${
                   activeTab === 'users'
                     ? 'neon-tab-active border-primary text-primary'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                <Users className="w-5 h-5 inline mr-2" />
-                User Management
+                <Users className="w-4 h-4 md:w-5 md:h-5 inline mr-1 md:mr-2" />
+                <span className="hidden sm:inline">User Management</span>
+                <span className="sm:hidden">Users</span>
               </button>
               {isOwnerUser && (
                 <button
                   onClick={() => setActiveTab('admins')}
-                  className={`px-6 py-4 font-medium text-sm border-b-2 transition ${
+                  className={`px-3 md:px-6 py-3 md:py-4 font-medium text-xs md:text-sm border-b-2 transition whitespace-nowrap ${
                     activeTab === 'admins'
                       ? 'neon-tab-active border-primary text-primary'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  <Shield className="w-5 h-5 inline mr-2" />
-                  Admin Management
+                  <Shield className="w-4 h-4 md:w-5 md:h-5 inline mr-1 md:mr-2" />
+                  <span className="hidden sm:inline">Admin Management</span>
+                  <span className="sm:hidden">Admins</span>
                 </button>
               )}
               <button
-                onClick={() => setActiveTab('applications')}
-                className={`px-6 py-4 font-medium text-sm border-b-2 transition ${
-                  activeTab === 'applications'
-                    ? 'neon-tab-active border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <FileText className="w-5 h-5 inline mr-2" />
-                Applications
-              </button>
-              <button
-                onClick={() => setActiveTab('statistics')}
-                className={`px-6 py-4 font-medium text-sm border-b-2 transition ${
-                  activeTab === 'statistics'
-                    ? 'neon-tab-active border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <BarChart3 className="w-5 h-5 inline mr-2" />
-                Statistics
-              </button>
-              <button
-                onClick={() => setActiveTab('fleet')}
-                className={`px-6 py-4 font-medium text-sm border-b-2 transition ${
-                  activeTab === 'fleet'
-                    ? 'neon-tab-active border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Plane className="w-5 h-5 inline mr-2" />
-                Fleet Management
-              </button>
-              <button
                 onClick={() => setActiveTab('pireps')}
-                className={`px-6 py-4 font-medium text-sm border-b-2 transition ${
+                className={`px-3 md:px-6 py-3 md:py-4 font-medium text-xs md:text-sm border-b-2 transition whitespace-nowrap ${
                   activeTab === 'pireps'
                     ? 'neon-tab-active border-primary text-primary'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                <FileText className="w-5 h-5 inline mr-2" />
-                PIREP Administration
+                <FileText className="w-4 h-4 md:w-5 md:h-5 inline mr-1 md:mr-2" />
+                <span className="hidden sm:inline">PIREP Administration</span>
+                <span className="sm:hidden">PIREPs</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('applications')}
+                className={`px-3 md:px-6 py-3 md:py-4 font-medium text-xs md:text-sm border-b-2 transition whitespace-nowrap ${
+                  activeTab === 'applications'
+                    ? 'neon-tab-active border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <FileText className="w-4 h-4 md:w-5 md:h-5 inline mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Applications</span>
+                <span className="sm:hidden">Apps</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('statistics')}
+                className={`px-3 md:px-6 py-3 md:py-4 font-medium text-xs md:text-sm border-b-2 transition whitespace-nowrap ${
+                  activeTab === 'statistics'
+                    ? 'neon-tab-active border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4 md:w-5 md:h-5 inline mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Statistics</span>
+                <span className="sm:hidden">Stats</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('fleet')}
+                className={`px-3 md:px-6 py-3 md:py-4 font-medium text-xs md:text-sm border-b-2 transition whitespace-nowrap ${
+                  activeTab === 'fleet'
+                    ? 'neon-tab-active border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Plane className="w-4 h-4 md:w-5 md:h-5 inline mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Fleet Management</span>
+                <span className="sm:hidden">Fleet</span>
               </button>
               {isOwnerUser && (
                 <button
                   onClick={() => setActiveTab('settings')}
-                  className={`px-6 py-4 font-medium text-sm border-b-2 transition ${
+                  className={`px-3 md:px-6 py-3 md:py-4 font-medium text-xs md:text-sm border-b-2 transition whitespace-nowrap ${
                     activeTab === 'settings'
                       ? 'neon-tab-active border-primary text-primary'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  <Settings className="w-5 h-5 inline mr-2" />
-                  System Settings
+                  <Settings className="w-4 h-4 md:w-5 md:h-5 inline mr-1 md:mr-2" />
+                  <span className="hidden sm:inline">System Settings</span>
+                  <span className="sm:hidden">Settings</span>
                 </button>
               )}
             </nav>
@@ -802,7 +889,7 @@ export default function AdminPage() {
                 <h2 className="text-2xl font-bold">User Management</h2>
                 <div className="flex space-x-2">
                   <button 
-                    onClick={() => router.push('/crew-center/register')}
+                    onClick={() => router.push('/crew-center/admin/users/add')}
                     className="neon-button px-4 py-2 rounded-md hover:bg-primary-dark flex items-center"
                   >
                     <UserPlus className="w-4 h-4 mr-2" />
@@ -1083,6 +1170,41 @@ export default function AdminPage() {
                   {applications.filter(a => a.status === 'pending').length} pending
                 </div>
               </div>
+
+              {/* Filters and Search */}
+              <div className="bg-white rounded-lg shadow mb-6 p-4">
+                <div className="flex flex-col md:flex-row gap-4">
+                  {/* Status Filter */}
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Status Filter</label>
+                    <select
+                      value={applicationStatusFilter}
+                      onChange={(e) => setApplicationStatusFilter(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="all">All</option>
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+
+                  {/* Search */}
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                      <input
+                        type="text"
+                        value={applicationSearchQuery}
+                        onChange={(e) => setApplicationSearchQuery(e.target.value)}
+                        placeholder="Search by email, username, or motivation..."
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
               
               {isLoadingData ? (
                 <div className="text-center py-8">
@@ -1091,91 +1213,84 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {applications.length === 0 ? (
-                    <div className="text-center py-8">
-                      <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600">No applications found</p>
-                    </div>
-                  ) : (
-                    applications.map((app) => (
-                      <div key={app.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition">
-                        <div className="flex justify-between items-start mb-4">
+                  {(() => {
+                    // Filter applications by search query
+                    const filteredApplications = applications.filter(app => {
+                      if (!applicationSearchQuery) return true
+                      
+                      const query = applicationSearchQuery.toLowerCase()
+                      return (
+                        app.email.toLowerCase().includes(query) ||
+                        app.infiniteFlightUsername?.toLowerCase().includes(query) ||
+                        app.ifcUsername?.toLowerCase().includes(query) ||
+                        app.discordUsername?.toLowerCase().includes(query) ||
+                        app.motivation?.toLowerCase().includes(query)
+                      )
+                    })
+
+                    if (filteredApplications.length === 0) {
+                      return (
+                        <div className="text-center py-8">
+                          <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-600">No applications found</p>
+                        </div>
+                      )
+                    }
+
+                    return filteredApplications.map((app) => (
+                      <div
+                        key={app.id}
+                        onClick={() => {
+                          setSelectedApplication(app)
+                          setIsApplicationModalOpen(true)
+                        }}
+                        className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition cursor-pointer"
+                      >
+                        <div className="flex justify-between items-start">
                           <div className="flex-1">
-                            <p className="font-semibold text-gray-900 text-lg">{app.email}</p>
-                            <div className="mt-2 space-y-1">
-                              {app.ifcUsername && (
-                                <p className="text-sm text-gray-600">
-                                  <span className="font-medium">IFC Username:</span> {app.ifcUsername}
-                                </p>
-                              )}
+                            <div className="flex items-center space-x-3 mb-2">
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {app.infiniteFlightUsername || app.ifcUsername || app.email}
+                              </h3>
+                              <span className={`px-2 py-1 text-xs font-semibold rounded border ${
+                                app.status === 'pending' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                                app.status === 'approved' ? 'bg-green-100 text-green-800 border-green-200' :
+                                'bg-red-100 text-red-800 border-red-200'
+                              }`}>
+                                {app.status.toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-600 mb-2">
+                              <div className="flex items-center space-x-2">
+                                <Mail className="w-4 h-4" />
+                                <span>{app.email}</span>
+                              </div>
                               {app.discordUsername && (
-                                <p className="text-sm text-gray-600">
-                                  <span className="font-medium">Discord:</span> {app.discordUsername}
-                                </p>
+                                <div className="flex items-center space-x-2">
+                                  <MessageSquare className="w-4 h-4" />
+                                  <span>{app.discordUsername}</span>
+                                </div>
                               )}
                               {app.grade && (
-                                <p className="text-sm text-gray-600">
-                                  <span className="font-medium">Grade:</span> {app.grade}
-                                </p>
-                              )}
-                              {app.totalFlightTime !== null && app.totalFlightTime !== undefined && (
-                                <p className="text-sm text-gray-600">
-                                  <span className="font-medium">Flight Time:</span> {app.totalFlightTime} hours
-                                </p>
-                              )}
-                              {app.yearsOfExperience !== null && app.yearsOfExperience !== undefined && (
-                                <p className="text-sm text-gray-600">
-                                  <span className="font-medium">Experience:</span> {app.yearsOfExperience} years
-                                </p>
+                                <div className="flex items-center space-x-2">
+                                  <Award className="w-4 h-4" />
+                                  <span>Grade {app.grade}</span>
+                                </div>
                               )}
                             </div>
                             {app.motivation && (
-                              <div className="mt-3 pt-3 border-t border-gray-200">
-                                <p className="text-xs font-medium text-gray-500 mb-1">Motivation:</p>
-                                <p className="text-sm text-gray-700 line-clamp-3">{app.motivation}</p>
-                              </div>
+                              <p className="mt-2 text-sm text-gray-500 line-clamp-2">
+                                {app.motivation}
+                              </p>
                             )}
                             <p className="text-xs text-gray-500 mt-3">
-                              Applied on {new Date(app.createdAt).toLocaleDateString()} at {new Date(app.createdAt).toLocaleTimeString()}
+                              Applied on {new Date(app.createdAt).toLocaleDateString()}
                             </p>
-                          </div>
-                          <div className="flex flex-col items-end space-y-3 ml-4">
-                            {app.status === 'pending' && (
-                              <span className="px-3 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                                Pending
-                              </span>
-                            )}
-                            {app.status === 'approved' && (
-                              <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                                Approved
-                              </span>
-                            )}
-                            {app.status === 'rejected' && (
-                              <span className="px-3 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                                Rejected
-                              </span>
-                            )}
-                            {app.status === 'pending' && (
-                              <div className="flex items-center space-x-2">
-                                <button 
-                                  className="text-green-600 hover:text-green-800 p-2 hover:bg-green-50 rounded transition"
-                                  title="Approve"
-                                >
-                                  <CheckCircle className="w-5 h-5" />
-                                </button>
-                                <button 
-                                  className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition"
-                                  title="Reject"
-                                >
-                                  <XCircle className="w-5 h-5" />
-                                </button>
-                              </div>
-                            )}
                           </div>
                         </div>
                       </div>
                     ))
-                  )}
+                  })()}
                 </div>
               )}
             </div>
@@ -2708,6 +2823,141 @@ export default function AdminPage() {
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Delete</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Application Detail Modal */}
+      {isApplicationModalOpen && selectedApplication && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="neon-modal rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900">Application Details</h2>
+              <button
+                onClick={() => {
+                  setIsApplicationModalOpen(false)
+                  setSelectedApplication(null)
+                }}
+                className="text-gray-400 hover:text-gray-600 transition"
+                disabled={isUpdatingApplication}
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Status Badge */}
+              <div className="flex items-center justify-between">
+                <span className={`px-3 py-1 text-sm font-semibold rounded border flex items-center space-x-1 ${
+                  selectedApplication.status === 'pending' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                  selectedApplication.status === 'approved' ? 'bg-green-100 text-green-800 border-green-200' :
+                  'bg-red-100 text-red-800 border-red-200'
+                }`}>
+                  {selectedApplication.status === 'pending' && <Clock className="w-4 h-4" />}
+                  {selectedApplication.status === 'approved' && <CheckCircle className="w-4 h-4" />}
+                  {selectedApplication.status === 'rejected' && <XCircle className="w-4 h-4" />}
+                  <span>{selectedApplication.status.toUpperCase()}</span>
+                </span>
+                <div className="text-sm text-gray-500">
+                  Submitted: {new Date(selectedApplication.createdAt).toLocaleString()}
+                </div>
+              </div>
+
+              {/* Application Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Infinite Flight Username</label>
+                  <p className="text-gray-900">{selectedApplication.infiniteFlightUsername || selectedApplication.ifcUsername || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <p className="text-gray-900">{selectedApplication.email}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Discord Username</label>
+                  <p className="text-gray-900">{selectedApplication.discordUsername || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">IFC Username</label>
+                  <p className="text-gray-900">{selectedApplication.ifcUsername || 'N/A'}</p>
+                </div>
+                {selectedApplication.grade && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
+                    <p className="text-gray-900">Grade {selectedApplication.grade}</p>
+                  </div>
+                )}
+                {selectedApplication.totalFlightTime !== null && selectedApplication.totalFlightTime !== undefined && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Total Flight Time</label>
+                    <p className="text-gray-900">{selectedApplication.totalFlightTime} hours</p>
+                  </div>
+                )}
+                {selectedApplication.yearsOfExperience !== null && selectedApplication.yearsOfExperience !== undefined && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Years of Experience</label>
+                    <p className="text-gray-900">{selectedApplication.yearsOfExperience} years</p>
+                  </div>
+                )}
+                {selectedApplication.reviewedAt && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Reviewed At</label>
+                    <p className="text-gray-900">{new Date(selectedApplication.reviewedAt).toLocaleString()}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Motivation */}
+              {selectedApplication.motivation && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Motivation</label>
+                  <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
+                    <p className="text-gray-900 whitespace-pre-wrap">{selectedApplication.motivation}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* User Account Link */}
+              {selectedApplication.user && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">User Account</label>
+                  <Link
+                    href={`/crew-center/admin/users/${selectedApplication.user.id}`}
+                    className="text-primary hover:text-primary-dark underline"
+                  >
+                    View User Profile ({selectedApplication.user.displayName || selectedApplication.user.email})
+                  </Link>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => handleApplicationStatusChange(selectedApplication.id, 'pending')}
+                  disabled={isUpdatingApplication || selectedApplication.status === 'pending'}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>Set Pending</span>
+                </button>
+                <button
+                  onClick={() => handleApplicationStatusChange(selectedApplication.id, 'approved')}
+                  disabled={isUpdatingApplication || selectedApplication.status === 'approved'}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Approve</span>
+                </button>
+                <button
+                  onClick={() => handleApplicationStatusChange(selectedApplication.id, 'rejected')}
+                  disabled={isUpdatingApplication || selectedApplication.status === 'rejected'}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>Reject</span>
                 </button>
               </div>
             </div>

@@ -16,12 +16,26 @@ export const ADMIN_EMAIL = 'admin@test.mxva'
  */
 export async function checkUserRole(): Promise<UserRole | null> {
   const user = auth.currentUser
-  if (!user) return null
+  if (!user || !user.email) return null
 
   try {
+    // First try to get role from database (more reliable)
+    try {
+      const response = await fetch(`/api/users/by-email/${encodeURIComponent(user.email)}`)
+      if (response.ok) {
+        const userData = await response.json()
+        if (userData.role) {
+          return userData.role as UserRole
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching role from database:', error)
+    }
+
+    // Fallback to Firebase token
     const idTokenResult = await user.getIdTokenResult()
     const role = idTokenResult.claims.role as string
-    if (role === 'user' || role === 'admin' || role === 'owner') {
+    if (role === 'user' || role === 'admin' || role === 'owner' || role === 'staff') {
       return role as UserRole
     }
     return null
@@ -32,17 +46,31 @@ export async function checkUserRole(): Promise<UserRole | null> {
 }
 
 /**
- * Get user role from Firebase token
+ * Get user role from Firebase token or database
  */
 export async function getUserRole(userId?: string): Promise<UserRole | null> {
   const user = userId ? null : auth.currentUser
   if (!user && !userId) return null
 
   try {
-    if (user) {
+    if (user && user.email) {
+      // First try to get role from database (more reliable)
+      try {
+        const response = await fetch(`/api/users/by-email/${encodeURIComponent(user.email)}`)
+        if (response.ok) {
+          const userData = await response.json()
+          if (userData.role) {
+            return userData.role as UserRole
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching role from database:', error)
+      }
+
+      // Fallback to Firebase token
       const idTokenResult = await user.getIdTokenResult(true) // Force refresh
       const role = idTokenResult.claims.role as string
-      if (role === 'user' || role === 'admin' || role === 'owner') {
+      if (role === 'user' || role === 'admin' || role === 'owner' || role === 'staff') {
         return role as UserRole
       }
       return null

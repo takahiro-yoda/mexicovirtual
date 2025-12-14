@@ -88,7 +88,7 @@ export default function ApplyPage() {
       {/* Fixed background elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         {/* White logo decoration - full page background */}
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[1200px] h-[1200px] md:w-[1600px] md:h-[1600px] opacity-20 pointer-events-none">
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[840px] h-[840px] md:w-[1120px] md:h-[1120px] opacity-20 pointer-events-none">
           <img 
             src="/AMVA-log-1-white-full.png" 
             alt="AMVA Logo" 

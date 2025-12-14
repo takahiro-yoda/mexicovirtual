@@ -133,21 +133,6 @@ function getStatusColor(status: string): number {
 }
 
 /**
- * Get status emoji
- */
-function getStatusEmoji(status: string): string {
-  switch (status.toLowerCase()) {
-    case 'approved':
-      return '✅'
-    case 'rejected':
-      return '❌'
-    case 'pending':
-    default:
-      return '⏳'
-  }
-}
-
-/**
  * Send an application notification to Discord
  */
 export async function notifyNewApplication(application: {
@@ -183,55 +168,55 @@ export async function notifyNewApplication(application: {
   const ifcUsernameLink = `[${application.ifcUsername}](https://community.infiniteflight.com/u/${encodeURIComponent(application.ifcUsername)})`
 
   const embed: DiscordEmbed = {
-    title: '🆕 New Application Received',
+    title: 'New Application Received',
     description: `A new application has been submitted to MexicoVirtual.`,
     color: getStatusColor(application.status),
     fields: [
       {
-        name: '📝 Application ID',
+        name: 'Application ID',
         value: application.id,
         inline: false,
       },
       {
-        name: '👤 Infinite Flight Username',
+        name: 'Infinite Flight Username',
         value: application.infiniteFlightUsername,
         inline: true,
       },
       {
-        name: '📧 Email',
+        name: 'Email',
         value: application.email,
         inline: true,
       },
       {
-        name: '💬 Discord Username',
+        name: 'Discord Username',
         value: application.discordUsername,
         inline: true,
       },
       {
-        name: '🎮 IFC Username',
+        name: 'IFC Username',
         value: ifcUsernameLink,
         inline: true,
       },
       {
-        name: '⭐ Grade',
+        name: 'Grade',
         value: `Grade ${application.grade}`,
         inline: true,
       },
       {
-        name: '💭 Motivation',
+        name: 'Motivation',
         value: application.motivation.length > 1024
           ? application.motivation.substring(0, 1021) + '...'
           : application.motivation,
         inline: false,
       },
       {
-        name: '🕐 Submitted At',
+        name: 'Submitted At',
         value: formattedDate,
         inline: false,
       },
       {
-        name: '📊 Status',
-        value: `${getStatusEmoji(application.status)} ${application.status.charAt(0).toUpperCase() + application.status.slice(1)}`,
+        name: 'Status',
+        value: application.status.charAt(0).toUpperCase() + application.status.slice(1),
         inline: false,
       },
     ],
@@ -252,27 +237,18 @@ export async function notifyNewApplication(application: {
           style: 2, // Secondary (gray)
           label: 'In Progress',
           custom_id: `app_status_${application.id}_pending`,
-          emoji: {
-            name: '⏳',
-          },
         },
         {
           type: 2, // Button
           style: 3, // Success (green)
           label: 'Approve',
           custom_id: `app_status_${application.id}_approved`,
-          emoji: {
-            name: '✅',
-          },
         },
         {
           type: 2, // Button
           style: 4, // Danger (red)
           label: 'Reject',
           custom_id: `app_status_${application.id}_rejected`,
-          emoji: {
-            name: '❌',
-          },
         },
       ],
     },
@@ -326,55 +302,55 @@ export async function updateApplicationNotification(
   const ifcUsernameLink = `[${application.ifcUsername}](https://community.infiniteflight.com/u/${encodeURIComponent(application.ifcUsername)})`
 
   const embed: DiscordEmbed = {
-    title: '🆕 New Application Received',
+    title: 'New Application Received',
     description: `A new application has been submitted to MexicoVirtual.`,
     color: getStatusColor(application.status),
     fields: [
       {
-        name: '📝 Application ID',
+        name: 'Application ID',
         value: application.id,
         inline: false,
       },
       {
-        name: '👤 Infinite Flight Username',
+        name: 'Infinite Flight Username',
         value: application.infiniteFlightUsername,
         inline: true,
       },
       {
-        name: '📧 Email',
+        name: 'Email',
         value: application.email,
         inline: true,
       },
       {
-        name: '💬 Discord Username',
+        name: 'Discord Username',
         value: application.discordUsername,
         inline: true,
       },
       {
-        name: '🎮 IFC Username',
+        name: 'IFC Username',
         value: ifcUsernameLink,
         inline: true,
       },
       {
-        name: '⭐ Grade',
+        name: 'Grade',
         value: `Grade ${application.grade}`,
         inline: true,
       },
       {
-        name: '💭 Motivation',
+        name: 'Motivation',
         value: application.motivation.length > 1024
           ? application.motivation.substring(0, 1021) + '...'
           : application.motivation,
         inline: false,
       },
       {
-        name: '🕐 Submitted At',
+        name: 'Submitted At',
         value: formattedDate,
         inline: false,
       },
       {
-        name: '📊 Status',
-        value: `${getStatusEmoji(application.status)} ${application.status.charAt(0).toUpperCase() + application.status.slice(1)}`,
+        name: 'Status',
+        value: application.status.charAt(0).toUpperCase() + application.status.slice(1),
         inline: false,
       },
     ],
@@ -394,9 +370,6 @@ export async function updateApplicationNotification(
           style: 2, // Secondary (gray)
           label: 'In Progress',
           custom_id: `app_status_${application.id}_pending`,
-          emoji: {
-            name: '⏳',
-          },
           disabled: application.status === 'pending',
         },
         {
@@ -404,9 +377,6 @@ export async function updateApplicationNotification(
           style: 3, // Success (green)
           label: 'Approve',
           custom_id: `app_status_${application.id}_approved`,
-          emoji: {
-            name: '✅',
-          },
           disabled: application.status === 'approved',
         },
         {
@@ -414,9 +384,6 @@ export async function updateApplicationNotification(
           style: 4, // Danger (red)
           label: 'Reject',
           custom_id: `app_status_${application.id}_rejected`,
-          emoji: {
-            name: '❌',
-          },
           disabled: application.status === 'rejected',
         },
       ],

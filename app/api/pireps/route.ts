@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
       flightTime,
       departureAirport,
       arrivalAirport,
+      waypoints,
       liveryId,
       multiplierCode,
       comment,
@@ -56,6 +57,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate waypoints if provided
+    let waypointsString: string | null = null
+    if (waypoints) {
+      try {
+        // If waypoints is already a JSON string, parse it; otherwise stringify it
+        let waypointsArray: string[]
+        if (typeof waypoints === 'string') {
+          waypointsArray = JSON.parse(waypoints)
+        } else {
+          waypointsArray = waypoints
+        }
+        
+        // Validate each waypoint is a 4-character ICAO code
+        const invalidWaypoints = waypointsArray.filter(wp => typeof wp !== 'string' || wp.trim().length !== 4)
+        if (invalidWaypoints.length > 0) {
+          return NextResponse.json(
+            { error: 'All waypoints must be valid 4-character ICAO codes' },
+            { status: 400 }
+          )
+        }
+        
+        // Convert to uppercase and save as JSON string
+        waypointsString = JSON.stringify(waypointsArray.map(wp => wp.trim().toUpperCase()))
+      } catch (error) {
+        return NextResponse.json(
+          { error: 'Invalid waypoints format' },
+          { status: 400 }
+        )
+      }
+    }
+
     // Verify livery exists
     const livery = await prisma.livery.findUnique({
       where: { id: liveryId },
@@ -80,6 +112,7 @@ export async function POST(request: NextRequest) {
         flightTime: flightTime.trim(),
         departureAirport: departureAirport.toUpperCase().trim(),
         arrivalAirport: arrivalAirport.toUpperCase().trim(),
+        waypoints: waypointsString,
         liveryId: liveryId,
         multiplierCode: multiplierCode?.trim() || null,
         comment: comment?.trim() || null,

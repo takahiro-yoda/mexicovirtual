@@ -105,9 +105,11 @@ export default function Header() {
                 )}
               </>
             )}
-            <Link href="/apply" className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary-dark transition">
-              Apply
-            </Link>
+            {mounted && !loading && !user && (
+              <Link href="/apply" className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary-dark transition">
+                Apply
+              </Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -129,7 +131,9 @@ export default function Header() {
             <Link href="/operations/routes" className="block py-2 text-gray-700">Routes</Link>
             <Link href="/operations/ranks" className="block py-2 text-gray-700">Ranks</Link>
             <Link href="/crew-center" className="block py-2 text-gray-700">Crew Center</Link>
-            <Link href="/apply" className="block py-2 bg-primary text-white rounded-md text-center">Apply</Link>
+            {mounted && !loading && !user && (
+              <Link href="/apply" className="block py-2 bg-primary text-white rounded-md text-center">Apply</Link>
+            )}
           </div>
         )}
       </nav>
