@@ -137,3 +137,5 @@ export function calculateOptimalZoom(distanceKm: number): number {
     return 3
   }
 }
+
+

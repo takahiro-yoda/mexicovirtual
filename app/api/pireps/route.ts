@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/session'
+import { notifyNewPirep } from '@/lib/discord'
 
 export async function POST(request: NextRequest) {
   try {
@@ -125,6 +126,22 @@ export async function POST(request: NextRequest) {
           },
         },
       },
+    })
+
+    // Send Discord notification (non-blocking)
+    notifyNewPirep({
+      flightNumber: pirep.flightNumber,
+      pilotIfcName: user.infiniteFlightUsername,
+      pilotCallsign: user.callsign,
+      departureAirport: pirep.departureAirport,
+      arrivalAirport: pirep.arrivalAirport,
+      aircraftTypeName: pirep.livery.aircraftType.name,
+      liveryName: pirep.livery.name,
+      flightTime: pirep.flightTime,
+      createdAt: pirep.createdAt,
+    }).catch((error) => {
+      // Log error but don't fail the request
+      console.error('Failed to send Discord PIREP notification:', error)
     })
 
     return NextResponse.json({

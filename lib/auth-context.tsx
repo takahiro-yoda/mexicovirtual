@@ -29,6 +29,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [permissions, setPermissions] = useState<ReturnType<typeof getUserPermissions> | null>(null)
 
   useEffect(() => {
+    // Fallback timeout: ensure loading is set to false after maximum 15 seconds
+    const fallbackTimeout = setTimeout(() => {
+      setLoading(false)
+    }, 15000)
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
         setUser(user)
@@ -36,6 +41,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (user && user.email) {
           // Sync user to Prisma database automatically
           try {
+            const syncController = new AbortController()
+            const syncTimeout = setTimeout(() => syncController.abort(), 8000)
+            
             await fetch('/api/users/sync', {
               method: 'POST',
               headers: {
@@ -46,9 +54,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 displayName: user.displayName,
                 uid: user.uid,
               }),
+              signal: syncController.signal,
             })
-          } catch (error) {
-            console.error('Error syncing user to Prisma:', error)
+            clearTimeout(syncTimeout)
+          } catch (error: any) {
+            if (error.name !== 'AbortError') {
+              console.error('Error syncing user to Prisma:', error)
+            }
             // Don't block login if sync fails
           }
           
@@ -59,7 +71,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             // Get role from database first (most reliable)
             try {
-              const response = await fetch(`/api/users/by-email/${encodeURIComponent(user.email)}`)
+              const roleController = new AbortController()
+              const roleTimeout = setTimeout(() => roleController.abort(), 8000)
+              
+              const response = await fetch(`/api/users/by-email/${encodeURIComponent(user.email)}`, {
+                signal: roleController.signal,
+              })
+              clearTimeout(roleTimeout)
+              
               if (response.ok) {
                 const userData = await response.json()
                 if (userData.role) {
@@ -68,23 +87,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   setPermissions(getUserPermissions(dbRole))
                 } else {
                   // Fallback to Firebase token if no role in database
-                  const userRole = await getUserRole()
-                  const finalRole = userRole || 'user'
-                  setRole(finalRole as UserRole)
-                  setPermissions(getUserPermissions(finalRole))
+                  try {
+                    const userRole = await Promise.race([
+                      getUserRole(),
+                      new Promise<UserRole | null>((_, reject) =>
+                        setTimeout(() => reject(new Error('getUserRole timeout')), 5000)
+                      ),
+                    ])
+                    const finalRole = userRole || 'user'
+                    setRole(finalRole as UserRole)
+                    setPermissions(getUserPermissions(finalRole))
+                  } catch (fallbackError) {
+                    console.error('Error getting user role from Firebase:', fallbackError)
+                    setRole('user')
+                    setPermissions(getUserPermissions('user'))
+                  }
                 }
               } else {
                 // Fallback to Firebase token if database fetch fails
-                const userRole = await getUserRole()
-                const finalRole = userRole || 'user'
-                setRole(finalRole as UserRole)
-                setPermissions(getUserPermissions(finalRole))
+                try {
+                  const userRole = await Promise.race([
+                    getUserRole(),
+                    new Promise<UserRole | null>((_, reject) =>
+                      setTimeout(() => reject(new Error('getUserRole timeout')), 5000)
+                    ),
+                  ])
+                  const finalRole = userRole || 'user'
+                  setRole(finalRole as UserRole)
+                  setPermissions(getUserPermissions(finalRole))
+                } catch (fallbackError) {
+                  console.error('Error getting user role from Firebase:', fallbackError)
+                  setRole('user')
+                  setPermissions(getUserPermissions('user'))
+                }
               }
-            } catch (error) {
-              console.error('Error getting user role from database:', error)
+            } catch (error: any) {
+              if (error.name !== 'AbortError') {
+                console.error('Error getting user role from database:', error)
+              }
               // Fallback to Firebase token
               try {
-                const userRole = await getUserRole()
+                const userRole = await Promise.race([
+                  getUserRole(),
+                  new Promise<UserRole | null>((_, reject) =>
+                    setTimeout(() => reject(new Error('getUserRole timeout')), 5000)
+                  ),
+                ])
                 const finalRole = userRole || 'user'
                 setRole(finalRole as UserRole)
                 setPermissions(getUserPermissions(finalRole))
@@ -107,11 +155,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPermissions(null)
       } finally {
         // Always set loading to false, even if there's an error
+        clearTimeout(fallbackTimeout)
         setLoading(false)
       }
     })
 
-    return () => unsubscribe()
+    return () => {
+      clearTimeout(fallbackTimeout)
+      unsubscribe()
+    }
   }, [])
 
   const signOut = async () => {
@@ -129,4 +181,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   return useContext(AuthContext)
 }
-

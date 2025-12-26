@@ -86,3 +86,5 @@ node -e "console.log(process.env.FIREBASE_SERVICE_ACCOUNT_KEY ? '✅ Set' : '❌
 - `.gitignore`に`.env.local`が含まれているか確認
 - このファイルには機密情報が含まれています
 - 他の人と共有しないでください
+
+

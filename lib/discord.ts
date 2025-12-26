@@ -76,8 +76,20 @@ export async function sendDiscordWebhook(
       return { success: false }
     }
 
-    const data = await response.json()
-    return { success: true, messageId: data.id }
+    // Discord webhooks often return 204 No Content on success unless `?wait=true` is used.
+    // Handle both JSON and empty responses gracefully.
+    const responseText = await response.text()
+    if (!responseText) {
+      return { success: true }
+    }
+
+    try {
+      const data = JSON.parse(responseText)
+      return { success: true, messageId: data?.id }
+    } catch {
+      // Non-JSON but OK is still a success for Discord webhooks
+      return { success: true }
+    }
   } catch (error) {
     console.error('Failed to send Discord webhook:', error)
     return { success: false }
@@ -396,5 +408,77 @@ export async function updateApplicationNotification(
   }
 
   return await updateDiscordWebhookMessage(webhookUrl, messageId, payload)
+}
+
+function formatPirepFlightTimeToHHMM(flightTime: string): string {
+  if (!flightTime) return flightTime
+
+  // Already HH:MM
+  const hhmmMatch = flightTime.match(/^(\d{1,2}):(\d{2})$/)
+  if (hhmmMatch) {
+    const hh = hhmmMatch[1].padStart(2, '0')
+    const mm = hhmmMatch[2]
+    return `${hh}:${mm}`
+  }
+
+  // Stored format: "XXhrYYmin" (but accept flexible casing/spaces)
+  const hrMinMatch = flightTime.match(/^\s*(\d+)\s*hr\s*(\d+)\s*min\s*$/i)
+  if (hrMinMatch) {
+    const hh = String(parseInt(hrMinMatch[1], 10)).padStart(2, '0')
+    const mm = String(parseInt(hrMinMatch[2], 10)).padStart(2, '0')
+    return `${hh}:${mm}`
+  }
+
+  return flightTime
+}
+
+/**
+ * Send a PIREP submission notification to Discord
+ */
+export async function notifyNewPirep(pirep: {
+  flightNumber: string
+  pilotIfcName: string
+  pilotCallsign?: string | null
+  departureAirport: string
+  arrivalAirport: string
+  aircraftTypeName: string
+  liveryName: string
+  flightTime: string
+  createdAt: Date
+}): Promise<{ success: boolean; messageId?: string }> {
+  const webhookUrl = process.env.DISCORD_PIREP_WEBHOOK_URL
+
+  if (!webhookUrl) {
+    console.warn('DISCORD_PIREP_WEBHOOK_URL is not set. Skipping Discord PIREP notification.')
+    return { success: false }
+  }
+
+  const pilotDisplay = `${pirep.pilotIfcName}${pirep.pilotCallsign ? ` (${pirep.pilotCallsign})` : ''}`
+  const routeDisplay = `${pirep.departureAirport.toUpperCase()} - ${pirep.arrivalAirport.toUpperCase()}`
+  const fleetDisplay = `${pirep.aircraftTypeName} ${pirep.liveryName}`.trim()
+  const flightTimeDisplay = formatPirepFlightTimeToHHMM(pirep.flightTime)
+
+  const embed: DiscordEmbed = {
+    title: 'New PIREP submitted!',
+    color: getStatusColor('pending'),
+    fields: [
+      { name: 'Flight Number', value: pirep.flightNumber, inline: false },
+      { name: 'Pilot (IFC name)', value: pilotDisplay, inline: false },
+      { name: 'Route', value: routeDisplay, inline: false },
+      { name: 'Fleet', value: fleetDisplay, inline: false },
+      { name: 'Flight Time', value: flightTimeDisplay, inline: false },
+    ],
+    footer: {
+      text: 'MexicoVirtual PIREP System',
+    },
+    timestamp: pirep.createdAt.toISOString(),
+  }
+
+  const payload: DiscordWebhookPayload = {
+    embeds: [embed],
+    username: 'MexicoVirtual PIREP Bot',
+  }
+
+  return await sendDiscordWebhook(webhookUrl, payload)
 }
 

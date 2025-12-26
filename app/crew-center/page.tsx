@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
 import { 
@@ -21,41 +21,20 @@ import {
 } from 'lucide-react'
 import { isAdmin } from '@/lib/permissions'
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
-
-// Dynamically import FlightRouteMap to prevent SSR issues with mapbox-gl
-// Only load on client side after mount
-const FlightRouteMap = dynamic(
-  () => import('@/components/FlightRouteMap'),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-          <p className="text-gray-500 text-sm">Loading map...</p>
-        </div>
-      </div>
-    ),
-  }
-)
+import FlightRouteMap from '@/components/FlightRouteMap'
 
 export default function CrewCenterPage() {
   const { user, loading, role, signOut } = useAuth()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [flightTimeMinutes, setFlightTimeMinutes] = useState(0)
-  const [totalFlights, setTotalFlights] = useState(0)
-  const [visitedAirportsCount, setVisitedAirportsCount] = useState(0)
-  const [thisMonthFlights, setThisMonthFlights] = useState(0)
   const [isPirepModalOpen, setIsPirepModalOpen] = useState(false)
   const [isSubmittingPirep, setIsSubmittingPirep] = useState(false)
-  const [isMultiLegMode, setIsMultiLegMode] = useState(false)
-  const [waypoints, setWaypoints] = useState<string[]>([])
   const [liveries, setLiveries] = useState<Array<{ id: string; name: string; aircraftType: { id: string; name: string } }>>([])
   const [groupedLiveries, setGroupedLiveries] = useState<Record<string, Array<{ id: string; name: string; aircraftType: { id: string; name: string } }>>>({})
   const [selectedAircraftTypeId, setSelectedAircraftTypeId] = useState<string>('')
   const [selectedLiveryId, setSelectedLiveryId] = useState<string>('')
+  const [waypoints, setWaypoints] = useState<string[]>([])
   const [pirepFormData, setPirepFormData] = useState({
     flightDate: '',
     flightNumber: '',
@@ -67,85 +46,38 @@ export default function CrewCenterPage() {
     multiplierCode: '',
     comment: '',
   })
-  const [approvedFlights, setApprovedFlights] = useState<Array<{
-    id: string
-    flightDate: string
-    flightNumber: string
-    flightTime: string
-    departureAirport: string
-    arrivalAirport: string
-    waypoints?: string | null
-    livery: {
-      name: string
-      aircraftType: {
-        name: string
-      }
-    }
-    comment?: string | null
-    reviewedAt?: Date | null
-    multiplierCode?: string | null
-    adminComment?: string | null
-    createdAt?: string
-  }>>([])
-  const [isLoadingFlights, setIsLoadingFlights] = useState(false)
-  const [selectedFlightDetail, setSelectedFlightDetail] = useState<typeof approvedFlights[0] | null>(null)
-  const [isFlightDetailModalOpen, setIsFlightDetailModalOpen] = useState(false)
 
-  // Load statistics from API
-  const loadStatistics = useCallback(async () => {
-    if (!user?.email) return
-    
-    try {
-      // Load user statistics
-      const statsResponse = await fetch(`/api/users/by-email/${encodeURIComponent(user.email || '')}/statistics`)
-      
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json()
-        setFlightTimeMinutes(statsData.totalFlightTimeMinutes || 0)
-        setTotalFlights(statsData.totalFlights || 0)
-        setVisitedAirportsCount(Array.isArray(statsData.visitedAirports) ? statsData.visitedAirports.length : 0)
-      } else {
-        console.error('Failed to load statistics:', statsResponse.status, statsResponse.statusText)
-      }
-
-      // Load approved flights to calculate this month's flights
-      const flightsResponse = await fetch(`/api/pireps?userEmail=${encodeURIComponent(user.email || '')}&status=approved`)
-      
-      if (flightsResponse.ok) {
-        const flightsData = await flightsResponse.json()
-        // Calculate this month's flights
-        const now = new Date()
-        const currentMonth = now.getMonth()
-        const currentYear = now.getFullYear()
-        
-        const thisMonthFlightsCount = flightsData.filter((flight: any) => {
-          const flightDate = new Date(flight.flightDate)
-          return flightDate.getMonth() === currentMonth && flightDate.getFullYear() === currentYear
-        }).length
-        
-        setThisMonthFlights(thisMonthFlightsCount)
-      } else {
-        console.error('Failed to load flights:', flightsResponse.status, flightsResponse.statusText)
-      }
-    } catch (error) {
-      console.error('Error loading statistics:', error)
-    }
-  }, [user?.email])
-
+  // Load flight time from API
   useEffect(() => {
     if (user?.email) {
+      const loadFlightTime = async () => {
+        try {
+          // Find user in Prisma by email to get user ID
+          const response = await fetch(`/api/users/by-email/${encodeURIComponent(user.email || '')}/statistics`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            setFlightTimeMinutes(data.totalFlightTimeMinutes || 0)
+          } else {
+            console.error('Failed to load flight time:', response.status, response.statusText)
+          }
+        } catch (error) {
+          console.error('Error loading flight time:', error)
+        }
+      }
+      
       // Load initially
-      loadStatistics()
+      loadFlightTime()
       
       // Reload when window gains focus (user returns from admin panel)
       const handleFocus = () => {
-        loadStatistics()
+        loadFlightTime()
       }
       
       // Reload when page becomes visible (user switches back to tab)
       const handleVisibilityChange = () => {
         if (!document.hidden) {
-          loadStatistics()
+          loadFlightTime()
         }
       }
       
@@ -157,34 +89,7 @@ export default function CrewCenterPage() {
         document.removeEventListener('visibilitychange', handleVisibilityChange)
       }
     }
-  }, [user?.email, loadStatistics])
-
-  // Load approved flights when flights tab is active
-  useEffect(() => {
-    if (activeTab === 'flights' && user?.email) {
-      const loadApprovedFlights = async () => {
-        setIsLoadingFlights(true)
-        try {
-          const response = await fetch(`/api/pireps?userEmail=${encodeURIComponent(user.email || '')}&status=approved`)
-          
-          if (response.ok) {
-            const data = await response.json()
-            setApprovedFlights(data)
-          } else {
-            console.error('Failed to load approved flights:', response.status, response.statusText)
-            setApprovedFlights([])
-          }
-        } catch (error) {
-          console.error('Error loading approved flights:', error)
-          setApprovedFlights([])
-        } finally {
-          setIsLoadingFlights(false)
-        }
-      }
-      
-      loadApprovedFlights()
-    }
-  }, [activeTab, user?.email])
+  }, [user?.email])
 
   // Load liveries when modal opens
   useEffect(() => {
@@ -262,6 +167,7 @@ export default function CrewCenterPage() {
     if (!isPirepModalOpen) {
       setSelectedAircraftTypeId('')
       setSelectedLiveryId('')
+      setWaypoints([])
     } else {
       // Set default date to today when modal opens
       const today = new Date()
@@ -280,27 +186,6 @@ export default function CrewCenterPage() {
   useEffect(() => {
     setSelectedLiveryId('')
   }, [selectedAircraftTypeId])
-
-  // Prevent background scrolling when modal is open
-  useEffect(() => {
-    if (isPirepModalOpen || isFlightDetailModalOpen) {
-      // Save current scroll position
-      const scrollY = window.scrollY
-      document.body.style.position = 'fixed'
-      document.body.style.top = `-${scrollY}px`
-      document.body.style.width = '100%'
-      document.body.style.overflow = 'hidden'
-      
-      return () => {
-        // Restore scroll position when modal closes
-        document.body.style.position = ''
-        document.body.style.top = ''
-        document.body.style.width = ''
-        document.body.style.overflow = ''
-        window.scrollTo(0, scrollY)
-      }
-    }
-  }, [isPirepModalOpen, isFlightDetailModalOpen])
 
   // Get available aircraft types (unique list)
   const aircraftTypes = Array.from(new Set(liveries.map(l => l.aircraftType.id)))
@@ -361,27 +246,13 @@ export default function CrewCenterPage() {
     return Math.floor(totalMinutes / 60)
   }
 
-  // Calculate rank based on flight time and flights
-  const calculateRank = (flightHours: number, flights: number): string => {
-    if (flightHours >= 1000 && flights >= 500) return 'Senior Captain'
-    if (flightHours >= 500 && flights >= 250) return 'Captain'
-    if (flightHours >= 200 && flights >= 100) return 'Senior First Officer'
-    if (flightHours >= 50 && flights >= 25) return 'First Officer'
-    if (flightHours >= 10 && flights >= 5) return 'Second Officer'
-    return 'Trainee'
-  }
-
-  // Calculate current rank
-  const flightHours = formatFlightTimeHours(flightTimeMinutes)
-  const currentRank = calculateRank(flightHours, totalFlights)
-
-  // Stats data from API
+  // Mock data
   const stats = {
-    totalFlightTime: flightHours,
-    totalFlights: totalFlights,
-    thisMonth: thisMonthFlights,
-    visitedAirports: visitedAirportsCount,
-    currentRank: currentRank,
+    totalFlightTime: flightTimeMinutes > 0 ? formatFlightTimeHours(flightTimeMinutes) : 245,
+    totalFlights: 89,
+    thisMonth: 12,
+    visitedAirports: 34,
+    currentRank: 'First Officer',
   }
 
   const recentFlights = [
@@ -407,19 +278,14 @@ export default function CrewCenterPage() {
       return
     }
 
-    // Validate waypoints in multi-leg mode
-    if (isMultiLegMode) {
-      const validWaypoints = waypoints.filter(w => w.trim().length === 4)
-      if (validWaypoints.length === 0) {
-        alert('Please add at least one waypoint in multi-leg mode')
-        return
-      }
-      // Check if all waypoints are valid 4-character ICAO codes
-      const invalidWaypoints = waypoints.filter(w => w.trim().length > 0 && w.trim().length !== 4)
-      if (invalidWaypoints.length > 0) {
-        alert('All waypoints must be valid 4-character ICAO codes')
-        return
-      }
+    // Validate waypoints (optional)
+    const cleanedWaypoints = waypoints
+      .map(wp => wp.trim().toUpperCase())
+      .filter(wp => wp.length > 0)
+    const invalidWaypoints = cleanedWaypoints.filter(wp => wp.length !== 4)
+    if (invalidWaypoints.length > 0) {
+      alert('All waypoints must be valid 4-character ICAO codes')
+      return
     }
 
     // Validate flight time
@@ -433,11 +299,6 @@ export default function CrewCenterPage() {
     // Format flight time as XXhrXXmin
     const flightTime = `${hours}hr${minutes}min`
 
-    // Prepare waypoints data
-    const validWaypoints = isMultiLegMode 
-      ? waypoints.filter(w => w.trim().length === 4).map(w => w.trim().toUpperCase())
-      : null
-
     setIsSubmittingPirep(true)
 
     try {
@@ -450,7 +311,7 @@ export default function CrewCenterPage() {
           ...pirepFormData,
           liveryId: selectedLiveryId,
           flightTime: `${parseInt(pirepFormData.flightTimeHours) || 0}hr${parseInt(pirepFormData.flightTimeMinutes) || 0}min`,
-          waypoints: validWaypoints ? JSON.stringify(validWaypoints) : null,
+          waypoints: cleanedWaypoints.length > 0 ? cleanedWaypoints : undefined,
           userEmail: user?.email || null,
         }),
       })
@@ -480,12 +341,8 @@ export default function CrewCenterPage() {
       })
       setSelectedAircraftTypeId('')
       setSelectedLiveryId('')
-      setIsMultiLegMode(false)
       setWaypoints([])
       setIsPirepModalOpen(false)
-      
-      // Reload statistics after successful PIREP submission
-      await loadStatistics()
       
       // Show success message (you can add a toast notification here)
       alert('PIREP submitted successfully!')
@@ -518,7 +375,7 @@ export default function CrewCenterPage() {
   }
 
   return (
-    <div className="pt-20 min-h-screen bg-gray-50">
+    <div className="pt-20 min-h-screen bg-gray-50 text-gray-900">
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row gap-8">
           {/* Sidebar */}
@@ -734,94 +591,7 @@ export default function CrewCenterPage() {
                     Back to Dashboard
                   </button>
                 </div>
-                
-                {isLoadingFlights ? (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                    <span className="ml-3 text-gray-600">Loading flights...</span>
-                  </div>
-                ) : approvedFlights.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Plane className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 text-lg">No approved flights yet</p>
-                    <p className="text-gray-500 text-sm mt-2">Your approved PIREPs will appear here</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-gray-200">
-                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
-                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Flight Number</th>
-                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Route</th>
-                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Aircraft</th>
-                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Flight Time</th>
-                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Livery</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {approvedFlights.map((flight) => (
-                            <tr 
-                              key={flight.id} 
-                              className="border-b border-gray-100 hover:bg-gray-50 transition cursor-pointer"
-                              onClick={() => {
-                                setSelectedFlightDetail(flight)
-                                setIsFlightDetailModalOpen(true)
-                              }}
-                            >
-                              <td className="py-3 px-4 text-gray-700">
-                                {new Date(flight.flightDate).toLocaleDateString('en-US', {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric'
-                                })}
-                              </td>
-                              <td className="py-3 px-4 text-gray-700 font-medium">{flight.flightNumber}</td>
-                              <td className="py-3 px-4 text-gray-700">
-                                {(() => {
-                                  try {
-                                    const waypointsArray = flight.waypoints ? JSON.parse(flight.waypoints) as string[] : null
-                                    if (waypointsArray && waypointsArray.length > 0) {
-                                      return (
-                                        <>
-                                          <span className="font-semibold">{flight.departureAirport}</span>
-                                          {waypointsArray.map((wp, idx) => (
-                                            <span key={idx}>
-                                              <span className="mx-2 text-gray-400">→</span>
-                                              <span className="font-medium text-blue-600">{wp}</span>
-                                            </span>
-                                          ))}
-                                          <span className="mx-2 text-gray-400">→</span>
-                                          <span className="font-semibold">{flight.arrivalAirport}</span>
-                                        </>
-                                      )
-                                    }
-                                  } catch (e) {
-                                    // Invalid JSON, fall through to default display
-                                  }
-                                  return (
-                                    <>
-                                      <span className="font-semibold">{flight.departureAirport}</span>
-                                      <span className="mx-2 text-gray-400">→</span>
-                                      <span className="font-semibold">{flight.arrivalAirport}</span>
-                                    </>
-                                  )
-                                })()}
-                              </td>
-                              <td className="py-3 px-4 text-gray-700">{flight.livery.aircraftType.name}</td>
-                              <td className="py-3 px-4 text-gray-700">{flight.flightTime}</td>
-                              <td className="py-3 px-4 text-gray-600">{flight.livery.name}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="mt-4 text-sm text-gray-500">
-                      Showing {approvedFlights.length} approved {approvedFlights.length === 1 ? 'flight' : 'flights'}
-                    </div>
-                  </div>
-                )}
+                <p className="text-gray-600">Flight log functionality will be implemented here.</p>
               </div>
             )}
 
@@ -892,32 +662,29 @@ export default function CrewCenterPage() {
       {isPirepModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="neon-modal rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-2xl font-bold text-gray-900">File PIREP</h2>
-                <button
-                  onClick={() => {
-                    const today = new Date()
-                    const year = today.getFullYear()
-                    const month = String(today.getMonth() + 1).padStart(2, '0')
-                    const day = String(today.getDate()).padStart(2, '0')
-                    const todayString = `${year}-${month}-${day}`
-                    
-                    setPirepFormData(prev => ({
-                      ...prev,
-                      flightDate: todayString
-                    }))
-                    setSelectedAircraftTypeId('')
-                    setSelectedLiveryId('')
-                    setIsMultiLegMode(false)
-                    setWaypoints([])
-                    setIsPirepModalOpen(false)
-                  }}
-                  className="text-gray-400 hover:text-gray-600 transition"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900">File PIREP</h2>
+              <button
+                onClick={() => {
+                  const today = new Date()
+                  const year = today.getFullYear()
+                  const month = String(today.getMonth() + 1).padStart(2, '0')
+                  const day = String(today.getDate()).padStart(2, '0')
+                  const todayString = `${year}-${month}-${day}`
+                  
+                  setPirepFormData(prev => ({
+                    ...prev,
+                    flightDate: todayString
+                  }))
+                  setSelectedAircraftTypeId('')
+                  setSelectedLiveryId('')
+                  setWaypoints([])
+                  setIsPirepModalOpen(false)
+                }}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <X className="w-6 h-6" />
+              </button>
             </div>
             
             <form onSubmit={handlePirepSubmit} className="p-6 space-y-4">
@@ -992,150 +759,96 @@ export default function CrewCenterPage() {
                 </div>
               </div>
 
-              {/* Multi-leg mode toggle - placed near airport inputs */}
-              <div className="flex items-center space-x-3 pb-2">
-                <label className="flex items-center space-x-2 cursor-pointer">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Departure ICAO <span className="text-red-500">*</span>
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={isMultiLegMode}
-                    onChange={(e) => {
-                      setIsMultiLegMode(e.target.checked)
-                      if (!e.target.checked) {
-                        setWaypoints([])
-                      }
-                    }}
-                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                    type="text"
+                    name="departureAirport"
+                    value={pirepFormData.departureAirport}
+                    onChange={handlePirepFormChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary uppercase"
+                    placeholder="e.g., KJFK"
+                    maxLength={4}
                   />
-                  <span className="text-sm font-medium text-gray-700">Multi-leg Flight Mode</span>
-                </label>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Arrival ICAO <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="arrivalAirport"
+                    value={pirepFormData.arrivalAirport}
+                    onChange={handlePirepFormChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary uppercase"
+                    placeholder="e.g., EGLL"
+                    maxLength={4}
+                  />
+                </div>
               </div>
 
-              {!isMultiLegMode ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Departure ICAO <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="departureAirport"
-                      value={pirepFormData.departureAirport}
-                      onChange={handlePirepFormChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary uppercase"
-                      placeholder="e.g., KJFK"
-                      maxLength={4}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Arrival ICAO <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="arrivalAirport"
-                      value={pirepFormData.arrivalAirport}
-                      onChange={handlePirepFormChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary uppercase"
-                      placeholder="e.g., EGLL"
-                      maxLength={4}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Departure ICAO <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="departureAirport"
-                      value={pirepFormData.departureAirport}
-                      onChange={handlePirepFormChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary uppercase"
-                      placeholder="e.g., KJFK"
-                      maxLength={4}
-                    />
-                  </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Multi-leg Log (Waypoints) <span className="text-gray-400">(optional)</span>
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Add intermediate ICAO waypoints in order (e.g., MMMX → MMGL → MMOX).
+                </p>
 
-                  {waypoints.map((waypoint, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Waypoint {index + 1} <span className="text-red-500">*</span>
-                        </label>
+                <div className="space-y-2">
+                  {waypoints.length === 0 ? (
+                    <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                      No waypoints added.
+                    </div>
+                  ) : (
+                    waypoints.map((wp, idx) => (
+                      <div key={`wp-${idx}`} className="flex items-center gap-2">
                         <input
                           type="text"
-                          value={waypoint}
+                          value={wp}
                           onChange={(e) => {
-                            const newWaypoints = [...waypoints]
-                            newWaypoints[index] = e.target.value.toUpperCase().trim()
-                            setWaypoints(newWaypoints)
+                            const value = e.target.value.toUpperCase()
+                            setWaypoints(prev => prev.map((v, i) => (i === idx ? value : v)))
                           }}
-                          required
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary uppercase"
-                          placeholder="e.g., KORD"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary uppercase"
+                          placeholder="ICAO (e.g., MMGL)"
                           maxLength={4}
                         />
+                        <button
+                          type="button"
+                          onClick={() => setWaypoints(prev => prev.filter((_, i) => i !== idx))}
+                          className="px-3 py-2 text-sm text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition"
+                        >
+                          Remove
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newWaypoints = waypoints.filter((_, i) => i !== index)
-                          setWaypoints(newWaypoints)
-                        }}
-                        className="mt-6 px-3 py-2 text-red-600 hover:bg-red-50 rounded-md transition"
-                        title="Remove waypoint"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => setWaypoints([...waypoints, ''])}
-                    className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-md text-gray-600 hover:border-primary hover:text-primary transition flex items-center justify-center space-x-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Waypoint</span>
-                  </button>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Arrival ICAO <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="arrivalAirport"
-                      value={pirepFormData.arrivalAirport}
-                      onChange={handlePirepFormChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary uppercase"
-                      placeholder="e.g., EGLL"
-                      maxLength={4}
-                    />
-                  </div>
+                    ))
+                  )}
                 </div>
-              )}
 
-              {/* Flight Route Map Preview */}
-              {pirepFormData.departureAirport.trim().length === 4 && pirepFormData.arrivalAirport.trim().length === 4 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Route Preview
-                  </label>
-                  <FlightRouteMap
-                    departureAirport={pirepFormData.departureAirport}
-                    arrivalAirport={pirepFormData.arrivalAirport}
-                    waypoints={isMultiLegMode && waypoints.length > 0 ? waypoints.filter(w => w.trim().length === 4) : undefined}
-                  />
-                </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setWaypoints(prev => [...prev, ''])}
+                  className="mt-2 px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition"
+                >
+                  + Add waypoint
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Route Map</label>
+                <FlightRouteMap
+                  departureAirport={pirepFormData.departureAirport}
+                  arrivalAirport={pirepFormData.arrivalAirport}
+                  waypoints={waypoints}
+                />
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1230,7 +943,6 @@ export default function CrewCenterPage() {
                     }))
                     setSelectedAircraftTypeId('')
                     setSelectedLiveryId('')
-                    setIsMultiLegMode(false)
                     setWaypoints([])
                     setIsPirepModalOpen(false)
                   }}
@@ -1248,200 +960,6 @@ export default function CrewCenterPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Flight Detail Modal */}
-      {isFlightDetailModalOpen && selectedFlightDetail && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="neon-modal rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">Flight Details</h2>
-              <button
-                onClick={() => {
-                  setSelectedFlightDetail(null)
-                  setIsFlightDetailModalOpen(false)
-                }}
-                className="text-gray-400 hover:text-gray-600 transition"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              {/* Flight Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">
-                    Flight Date
-                  </label>
-                  <p className="text-gray-900 font-semibold">
-                    {new Date(selectedFlightDetail.flightDate).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">
-                    Flight Number
-                  </label>
-                  <p className="text-gray-900 font-semibold">{selectedFlightDetail.flightNumber}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">
-                    Departure Airport
-                  </label>
-                  <p className="text-gray-900 font-semibold text-lg">{selectedFlightDetail.departureAirport}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">
-                    Arrival Airport
-                  </label>
-                  <p className="text-gray-900 font-semibold text-lg">{selectedFlightDetail.arrivalAirport}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">
-                    Aircraft Type
-                  </label>
-                  <p className="text-gray-900 font-semibold">{selectedFlightDetail.livery.aircraftType.name}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">
-                    Livery
-                  </label>
-                  <p className="text-gray-900 font-semibold">{selectedFlightDetail.livery.name}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">
-                    Flight Time
-                  </label>
-                  <p className="text-gray-900 font-semibold">{selectedFlightDetail.flightTime}</p>
-                </div>
-
-                {selectedFlightDetail.multiplierCode && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">
-                      Multiplier Code
-                    </label>
-                    <p className="text-gray-900 font-semibold">{selectedFlightDetail.multiplierCode}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Waypoints */}
-              {selectedFlightDetail.waypoints && (() => {
-                try {
-                  const waypointsArray = JSON.parse(selectedFlightDetail.waypoints) as string[]
-                  if (waypointsArray && waypointsArray.length > 0) {
-                    return (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-500 mb-2">
-                          Waypoints
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                          {waypointsArray.map((waypoint, index) => (
-                            <span
-                              key={index}
-                              className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
-                            >
-                              {waypoint}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  }
-                } catch (e) {
-                  // Invalid JSON, ignore
-                }
-                return null
-              })()}
-
-              {/* Flight Route Map */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Route Map
-                </label>
-                <FlightRouteMap
-                  departureAirport={selectedFlightDetail.departureAirport}
-                  arrivalAirport={selectedFlightDetail.arrivalAirport}
-                  waypoints={selectedFlightDetail.waypoints ? (() => {
-                    try {
-                      return JSON.parse(selectedFlightDetail.waypoints) as string[]
-                    } catch (e) {
-                      return undefined
-                    }
-                  })() : undefined}
-                />
-              </div>
-
-              {/* Comment */}
-              {selectedFlightDetail.comment && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-2">
-                    Comment
-                  </label>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-gray-700 whitespace-pre-wrap">{selectedFlightDetail.comment}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Admin Comment */}
-              {selectedFlightDetail.adminComment && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-2">
-                    Admin Comment
-                  </label>
-                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                    <p className="text-gray-700 whitespace-pre-wrap">{selectedFlightDetail.adminComment}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Status and Review Info */}
-              <div className="pt-4 border-t border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                      Approved
-                    </span>
-                  </div>
-                  {selectedFlightDetail.reviewedAt && (
-                    <p className="text-sm text-gray-500">
-                      Reviewed on {new Date(selectedFlightDetail.reviewedAt).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end">
-              <button
-                onClick={() => {
-                  setSelectedFlightDetail(null)
-                  setIsFlightDetailModalOpen(false)
-                }}
-                className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark transition"
-              >
-                Close
-              </button>
-            </div>
           </div>
         </div>
       )}

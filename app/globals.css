@@ -6,14 +6,10 @@
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;
   --background-end-rgb: 255, 255, 255;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
+  /* This app currently styles pages as a light UI.
+     Prevent OS-level dark mode from flipping base text colors and causing
+     "text same as background" issues on light surfaces. */
+  color-scheme: light;
 }
 
 body {
@@ -29,6 +25,42 @@ body {
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+}
+
+@layer components {
+  /* Crew Center / Admin "Neon" UI primitives (were referenced but undefined) */
+  .neon-card {
+    @apply bg-white text-gray-900 border border-gray-200 shadow-sm;
+  }
+
+  .neon-stats-card {
+    @apply bg-white text-gray-900 border border-gray-200 shadow-sm;
+  }
+
+  .neon-sidebar {
+    @apply bg-white/90 text-gray-900 border border-gray-200 shadow-sm backdrop-blur;
+  }
+
+  .neon-modal {
+    @apply bg-white text-gray-900 border border-gray-200 shadow-xl;
+  }
+
+  .neon-border {
+    /* Used alongside border utilities; add subtle depth */
+    @apply shadow-sm;
+  }
+
+  .neon-tab-active {
+    @apply bg-white shadow-sm;
+  }
+
+  .neon-button {
+    @apply bg-primary text-white shadow-sm transition-colors;
+  }
+
+  .neon-input {
+    @apply text-gray-900 placeholder:text-gray-400 bg-white shadow-sm;
   }
 }
 
@@ -100,85 +132,19 @@ input[type="text"]::placeholder {
   color: #6b7280 !important;
 }
 
-/* Subtle neon effects for dashboard and admin panel */
-@keyframes subtle-glow {
-  0%, 100% {
-    box-shadow: 0 0 10px rgba(0, 102, 204, 0.1), 0 0 20px rgba(0, 102, 204, 0.05);
+/* Fade in animation for fleet page details */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
   }
-  50% {
-    box-shadow: 0 0 15px rgba(0, 102, 204, 0.15), 0 0 30px rgba(0, 102, 204, 0.08);
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-.neon-card {
-  background: white;
-  border: 1px solid rgba(0, 102, 204, 0.2);
-  box-shadow: 0 0 10px rgba(0, 102, 204, 0.1), 0 0 20px rgba(0, 102, 204, 0.05);
-  transition: all 0.3s ease;
-}
-
-.neon-card:hover {
-  border-color: rgba(0, 102, 204, 0.4);
-  box-shadow: 0 0 15px rgba(0, 102, 204, 0.2), 0 0 30px rgba(0, 102, 204, 0.1);
-  transform: translateY(-2px);
-}
-
-.neon-button {
-  background: #0066CC;
-  color: white;
-  box-shadow: 0 0 10px rgba(0, 102, 204, 0.3), 0 0 20px rgba(0, 102, 204, 0.1);
-  transition: all 0.3s ease;
-}
-
-.neon-button:hover {
-  box-shadow: 0 0 15px rgba(0, 102, 204, 0.5), 0 0 30px rgba(0, 102, 204, 0.2);
-  transform: translateY(-1px);
-}
-
-.neon-border {
-  border: 1px solid rgba(0, 102, 204, 0.3);
-  box-shadow: 0 0 8px rgba(0, 102, 204, 0.1);
-  transition: all 0.3s ease;
-}
-
-.neon-border:hover {
-  border-color: rgba(0, 102, 204, 0.5);
-  box-shadow: 0 0 12px rgba(0, 102, 204, 0.2);
-}
-
-.neon-input:focus {
-  border-color: rgba(0, 102, 204, 0.5);
-  box-shadow: 0 0 8px rgba(0, 102, 204, 0.2), 0 0 15px rgba(0, 102, 204, 0.1);
-  outline: none;
-}
-
-.neon-tab-active {
-  border-bottom-color: #0066CC;
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.2);
-}
-
-.neon-stats-card {
-  background: white;
-  border: 1px solid rgba(0, 102, 204, 0.2);
-  box-shadow: 0 0 12px rgba(0, 102, 204, 0.1), 0 0 25px rgba(0, 102, 204, 0.05);
-  transition: all 0.3s ease;
-}
-
-.neon-stats-card:hover {
-  border-color: rgba(0, 102, 204, 0.4);
-  box-shadow: 0 0 18px rgba(0, 102, 204, 0.2), 0 0 35px rgba(0, 102, 204, 0.1);
-  transform: translateY(-3px);
-}
-
-.neon-sidebar {
-  background: white;
-  border: 1px solid rgba(0, 102, 204, 0.15);
-  box-shadow: 0 0 15px rgba(0, 102, 204, 0.1);
-}
-
-.neon-modal {
-  background: white;
-  border: 1px solid rgba(0, 102, 204, 0.3);
-  box-shadow: 0 0 20px rgba(0, 102, 204, 0.15), 0 0 40px rgba(0, 102, 204, 0.1);
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
 }
 

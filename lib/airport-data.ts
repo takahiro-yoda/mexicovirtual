@@ -120,3 +120,5 @@ export async function fetchAirportDataFromAPI(icao: string): Promise<AirportData
     return null
   }
 }
+
+
