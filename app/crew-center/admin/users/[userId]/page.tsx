@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { 
@@ -59,31 +59,7 @@ export default function PilotDetailPage() {
   const [password, setPassword] = useState('')
   const [isSavingProfile, setIsSavingProfile] = useState(false)
 
-  useEffect(() => {
-    console.log('PilotDetailPage - userId:', userId)
-    console.log('PilotDetailPage - params:', params)
-    console.log('PilotDetailPage - userEmail from query:', userEmail)
-    console.log('PilotDetailPage - currentUser email:', currentUser?.email)
-  }, [userId, params, userEmail, currentUser])
-
-  useEffect(() => {
-    if (!loading && !currentUser) {
-      router.push('/crew-center/login')
-      return
-    }
-    
-    if (!loading && currentUser && !isAdmin(role)) {
-      router.push('/crew-center')
-      return
-    }
-
-    // Load pilot data
-    if (currentUser && userId && isAdmin(role)) {
-      loadPilotData()
-    }
-  }, [currentUser, loading, role, router, userId])
-
-  const loadPilotData = async () => {
+  const loadPilotData = useCallback(async () => {
     setIsLoading(true)
     try {
       // Use email from query parameter if available, otherwise use currentUser email or generate one
@@ -178,7 +154,31 @@ export default function PilotDetailPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [userEmail, userId, currentUser, role])
+
+  useEffect(() => {
+    console.log('PilotDetailPage - userId:', userId)
+    console.log('PilotDetailPage - params:', params)
+    console.log('PilotDetailPage - userEmail from query:', userEmail)
+    console.log('PilotDetailPage - currentUser email:', currentUser?.email)
+  }, [userId, params, userEmail, currentUser])
+
+  useEffect(() => {
+    if (!loading && !currentUser) {
+      router.push('/crew-center/login')
+      return
+    }
+    
+    if (!loading && currentUser && !isAdmin(role)) {
+      router.push('/crew-center')
+      return
+    }
+
+    // Load pilot data
+    if (currentUser && userId && isAdmin(role)) {
+      loadPilotData()
+    }
+  }, [currentUser, loading, role, router, userId, loadPilotData])
 
   const updatePermission = async (permissionType: 'staff' | 'owner' | 'executive', value: boolean) => {
     try {

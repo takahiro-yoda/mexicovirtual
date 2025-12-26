@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Check, Plane, Send } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 
 export default function ApplyPage() {
   const router = useRouter()
@@ -89,9 +90,11 @@ export default function ApplyPage() {
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         {/* White logo decoration - full page background */}
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[840px] h-[840px] md:w-[1120px] md:h-[1120px] opacity-20 pointer-events-none">
-          <img 
+          <Image 
             src="/AMVA-log-1-white-full.png" 
             alt="AMVA Logo" 
+            width={1120}
+            height={1120}
             className="w-full h-full object-contain"
           />
         </div>
