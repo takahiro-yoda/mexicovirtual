@@ -48,13 +48,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const fleets = await prisma.fleet.findMany({
+    const liveries = await prisma.livery.findMany({
+      include: {
+        aircraftType: true,
+      },
       orderBy: {
         createdAt: 'desc',
       },
     })
 
-    return NextResponse.json(fleets)
+    return NextResponse.json(liveries)
   } catch (error: any) {
     console.error('Error fetching fleets:', error)
     return NextResponse.json(
@@ -92,16 +95,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const newFleet = await prisma.fleet.create({
+    // Find or create aircraft type
+    let aircraftType = await prisma.aircraftType.findFirst({
+      where: { name: fleet.trim() },
+    })
+
+    if (!aircraftType) {
+      aircraftType = await prisma.aircraftType.create({
+        data: { name: fleet.trim() },
+      })
+    }
+
+    // Create livery
+    const newLivery = await prisma.livery.create({
       data: {
-        fleet: fleet.trim(),
-        livery: livery.trim(),
+        aircraftTypeId: aircraftType.id,
+        name: livery.trim(),
+      },
+      include: {
+        aircraftType: true,
       },
     })
 
     return NextResponse.json({
       success: true,
-      fleet: newFleet,
+      fleet: newLivery,
     })
   } catch (error: any) {
     console.error('Error creating fleet:', error)

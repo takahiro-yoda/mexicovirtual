@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     const duplicateLiveries: Array<{ aircraftType: string; livery: string }> = []
     
     // Check for duplicates
-    for (const [aircraftTypeName, liveries] of Object.entries(fleetData)) {
+    for (const [aircraftTypeName, liveries] of Object.entries(fleetData as Record<string, string[]>)) {
       // Validate liveries array
       if (!Array.isArray(liveries)) {
         return NextResponse.json(
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
     let liveriesCreated = 0
     
     // Process each aircraft type
-    for (const [aircraftTypeName, liveries] of Object.entries(fleetData)) {
+    for (const [aircraftTypeName, liveries] of Object.entries(fleetData as Record<string, string[]>)) {
       // Remove (PRO), (Free), (LEGACY) tags from aircraft type name
       const cleanAircraftTypeName = aircraftTypeName
         .replace(/\s*\(PRO\)\s*/gi, ' ')

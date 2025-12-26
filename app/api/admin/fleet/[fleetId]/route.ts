@@ -60,17 +60,32 @@ export async function PATCH(
       )
     }
 
-    const updatedFleet = await prisma.fleet.update({
+    // Find or create aircraft type
+    let aircraftType = await prisma.aircraftType.findFirst({
+      where: { name: fleet.trim() },
+    })
+
+    if (!aircraftType) {
+      aircraftType = await prisma.aircraftType.create({
+        data: { name: fleet.trim() },
+      })
+    }
+
+    // Update livery
+    const updatedLivery = await prisma.livery.update({
       where: { id: params.fleetId },
       data: {
-        fleet: fleet.trim(),
-        livery: livery.trim(),
+        aircraftTypeId: aircraftType.id,
+        name: livery.trim(),
+      },
+      include: {
+        aircraftType: true,
       },
     })
 
     return NextResponse.json({
       success: true,
-      fleet: updatedFleet,
+      fleet: updatedLivery,
     })
   } catch (error: any) {
     console.error('Error updating fleet:', error)
@@ -103,7 +118,7 @@ export async function DELETE(
       )
     }
 
-    await prisma.fleet.delete({
+    await prisma.livery.delete({
       where: { id: params.fleetId },
     })
 

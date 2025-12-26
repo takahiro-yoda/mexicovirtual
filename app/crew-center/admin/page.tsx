@@ -1455,7 +1455,7 @@ export default function AdminPage() {
                             <p className="text-sm text-gray-500 mt-2">Try adjusting your search query</p>
                           )}
                           {!fleetSearchQuery.trim() && (
-                            <p className="text-sm text-gray-500 mt-2">Click &ldquo;Add Aircraft Type&rdquo; to create a new aircraft type</p>
+                            <p className="text-sm text-gray-500 mt-2">Click &quot;Add Aircraft Type&quot; to create a new aircraft type</p>
                           )}
                         </div>
                       )

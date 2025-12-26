@@ -172,7 +172,7 @@ export default function AddUserPage() {
                       <li>Go to <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="underline">Firebase Console</a></li>
                       <li>Project Settings → Service Accounts → Generate new private key</li>
                       <li>Copy the JSON content</li>
-                      <li>Add to <code className="bg-blue-100 px-1 rounded">.env.local</code>: <code className="bg-blue-100 px-1 rounded">FIREBASE_SERVICE_ACCOUNT_KEY=&lsquo;[JSON]&rsquo;</code></li>
+                      <li>Add to <code className="bg-blue-100 px-1 rounded">.env.local</code>: <code className="bg-blue-100 px-1 rounded">FIREBASE_SERVICE_ACCOUNT_KEY=&apos;[JSON]&apos;</code></li>
                       <li>Restart the dev server</li>
                     </ol>
                   </div>
